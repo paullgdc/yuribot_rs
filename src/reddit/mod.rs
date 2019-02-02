@@ -2,6 +2,8 @@ mod errors;
 mod tests;
 pub use errors::RedditError;
 
+use std::rc::*;
+
 use futures::{Future, future::IntoFuture, Stream};
 use hyper::{
     Client,
@@ -9,7 +11,7 @@ use hyper::{
     Uri,
     Method, 
     Request,
-    client::{ResponseFuture, HttpConnector},
+    client::{HttpConnector},
     header::{USER_AGENT},
     Chunk,
 };
@@ -23,10 +25,9 @@ struct Inner {
 
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Reddit {
-    user_agent : String,
-    client : Client<HttpsConnector<HttpConnector>>,
+    inner : Rc<Inner>,
 }
 
 impl Reddit {
@@ -35,8 +36,10 @@ impl Reddit {
             .map_err(|_| RedditError::NetworkError)
             .map(|https| Client::builder().build(https))?;
         Ok(Reddit {
-            user_agent,
-            client,
+            inner : Rc::new(Inner {
+                user_agent,
+                client,
+            })
         })
     }
 
@@ -51,11 +54,11 @@ impl Reddit {
     fn api_call(&self, uri : Uri) -> impl Future<Item=Chunk, Error=RedditError> {
         let request = Request::builder()
             .method(Method::GET)
-            .header(USER_AGENT, self.user_agent.clone())
+            .header(USER_AGENT, self.inner.user_agent.clone())
             .uri(uri)
             .body(Body::empty())
             .expect("couldn't build request request");
-        self.client.request(request)
+        self.inner.client.request(request)
             .map_err(|_| RedditError::NetworkError)
             .and_then(|response| {
                 if !response.status().is_success() {
@@ -70,16 +73,16 @@ impl Reddit {
             })
     }
 
-    fn subreddit_posts(&self, subreddit : &str, order : Order) -> impl Future<Item=Vec<Link>, Error=RedditError> {
+    fn subreddit_posts(&self, subreddit : &str, order : Order, limit : usize) -> impl Future<Item=Vec<Link>, Error=RedditError> {
+        let reddit = self.clone();
         Uri::builder()
             .scheme("https")
             .authority("www.reddit.com")
             .path_and_query::<&str>(format!("/r/{}{}.json", subreddit, order.as_str()).as_ref())
             .build()
             .map_err(|_| RedditError::ParsingError)
-            .map(|uri| self.api_call(uri))
             .into_future()
-            .flatten()
+            .and_then(move |uri| reddit.api_call(uri))
             .and_then(|chunk| {
                 let reponse = serde_json::from_slice::<Type>(chunk.as_ref())
                     .map_err(|_| RedditError::ParsingError)?;
