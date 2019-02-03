@@ -120,11 +120,13 @@ pub struct Listing {
 pub struct Link {
     subreddit : String,
     title : String,
+    name : String,
     over_18 : bool,
     pinned : bool,
     url : String,
     spoiler : bool,
     selftext : String,
+    score : i64,
 }
 
 pub struct Order (&'static str);
