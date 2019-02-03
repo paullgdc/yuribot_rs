@@ -6,7 +6,7 @@ mod tests {
     use crate::reddit::{
         Type,
         Reddit,
-        Order,
+     Sort,
     };
     #[test]
     fn test_deserialize_response() {
@@ -28,6 +28,12 @@ mod tests {
             .unwrap();
         let reddit = Reddit::new("rustTest/0.1 by lunatiks".into())
             .unwrap();
-        assert!(dbg!(reac.run(reddit.subreddit_posts("wholesomeyuri", Order::TOP))).is_ok())
+        let links = dbg!(reac.run(reddit.subreddit_posts("wholesomeyuri".into(), Sort::TOP, 10)))
+            .unwrap();
+        assert_eq!(links.len(), 10);
+        let links = dbg!(reac.run(reddit.subreddit_posts("wholesomeyuri".into(), Sort::TOP, 26)))
+            .unwrap();
+        assert_eq!(links.len(), 26);
+
     }
 }

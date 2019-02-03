@@ -4,7 +4,15 @@ pub use errors::RedditError;
 
 use std::rc::*;
 
-use futures::{Future, future::IntoFuture, Stream};
+use futures::{
+    Future,
+    future::{
+        IntoFuture,
+        Loop,
+        loop_fn,
+    },
+    Stream
+};
 use hyper::{
     Client,
     Body,
@@ -73,32 +81,64 @@ impl Reddit {
             })
     }
 
-    fn subreddit_posts(&self, subreddit : &str, order : Order, limit : usize) -> impl Future<Item=Vec<Link>, Error=RedditError> {
+    fn subreddit_posts(
+        &self,
+        subreddit : String,
+        sort : Sort,
+        limit : usize
+    ) -> impl Future<Item=Vec<Link>, Error=RedditError> {
         let reddit = self.clone();
-        Uri::builder()
-            .scheme("https")
-            .authority("www.reddit.com")
-            .path_and_query::<&str>(format!("/r/{}{}.json", subreddit, order.as_str()).as_ref())
-            .build()
-            .map_err(|_| RedditError::ParsingError)
-            .into_future()
-            .and_then(move |uri| reddit.api_call(uri))
-            .and_then(|chunk| {
-                let reponse = serde_json::from_slice::<Type>(chunk.as_ref())
-                    .map_err(|_| RedditError::ParsingError)?;
-                if let Type::Listing(listing) = reponse {
-                    return listing.children.into_iter()
-                        .map(|child| {
-                            if let Type::Link(link) = child {
-                                return Ok(link);
+        loop_fn((limit, None, Vec::with_capacity(limit)),move |(limit, after, mut results)| {
+            let after = after.unwrap_or(String::new());
+            Uri::builder()
+                .scheme("https")
+                .authority("www.reddit.com")
+                .path_and_query::<&str>(format!(
+                    "/r/{}{}.json?limit={}&after={}&t=all",
+                    subreddit,
+                    sort.as_str(),
+                    if limit > 15 {15} else {limit},
+                    after    
+                ).as_ref())
+                .build()
+                .map_err(|_| RedditError::ParsingError)
+                .into_future()
+                .and_then({
+                    let reddit = reddit.clone();
+                    move |uri| reddit.api_call(uri)
+                })
+                .and_then(move |chunk| {
+                    let reponse = match serde_json::from_slice::<Type>(chunk.as_ref()) {
+                        Ok(response) => response,
+                        Err(_) => return Err(RedditError::ParsingError)
+                    };
+                    if let Type::Listing(listing) = reponse {
+                        let after = dbg!(listing.after);
+                        for res_link in listing.children.into_iter()
+                            .map(|child| {
+                                if let Type::Link(link) = child {
+                                    return Ok(link);
+                                }
+                                Err(RedditError::UnexpectedResponse)
+                            }) {
+                                match res_link {
+                                    Ok(link) => results.push(link),
+                                    Err(_) => return Err(RedditError::UnexpectedResponse)
+                                }
                             }
-                            Err(RedditError::UnexpectedResponse)
-                        })
-                        .collect::<Result<Vec<Link>, RedditError>>();
-                }
-                Err(RedditError::UnexpectedResponse)
-            })
+                        let limit = limit.checked_sub(15)
+                            .unwrap_or(0);
+                        return if limit > 0 {
+                            Ok(Loop::Continue((limit,after,results)))
+                        } else {
+                            Ok(Loop::Break(results))
+                        }
+                    };
+                    Err(RedditError::UnexpectedResponse)
+                })
+        })
     } 
+
 }
 
 #[derive(Deserialize, Debug)]
@@ -129,13 +169,13 @@ pub struct Link {
     score : i64,
 }
 
-pub struct Order (&'static str);
+pub struct Sort (&'static str);
 
-impl Order {
-    pub const NEW : Order = Order("/new");
-    pub const BEST :Order = Order("/best");
-    pub const TOP :Order = Order("/top");
-    pub const CONTROVERSIAL :Order = Order("/controversial");
+impl Sort {
+    pub const NEW : Sort = Sort("/new");
+    pub const BEST :Sort = Sort("/best");
+    pub const TOP :Sort = Sort("/top");
+    pub const CONTROVERSIAL :Sort = Sort("/controversial");
 
     fn as_str(&self) -> &'static str {
         self.0
