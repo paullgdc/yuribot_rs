@@ -16,7 +16,7 @@ impl fmt::Display for RedditError {
             NetworkError => write!(f, "network error while fetching"),
             ParsingError => write!(f, "error while parsing response"),
             ApiError(code) => write!(f, "reddit Api returned a {} code", code),
-            UnexpectedResponse => write!(f, "received unexpected result from api call")
+            UnexpectedResponse => write!(f, "received unexpected result from api call"),
         }
     }
 }
