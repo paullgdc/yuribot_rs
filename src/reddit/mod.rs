@@ -69,6 +69,7 @@ impl Reddit {
         &self,
         subreddit: String,
         sort: Sort,
+        max_time: MaxTime,
         limit: usize,
     ) -> impl Future<Item = Vec<Link>, Error = RedditError> {
         let reddit = self.clone();
@@ -81,11 +82,12 @@ impl Reddit {
                     .authority("www.reddit.com")
                     .path_and_query::<&str>(
                         format!(
-                            "/r/{}{}.json?limit={}&after={}&t=all",
+                            "/r/{}{}.json?limit={}&after={}&t={}",
                             subreddit,
                             sort.as_str(),
                             if limit > 15 { 15 } else { limit },
-                            after
+                            after,
+                            max_time.as_str(),
                         )
                         .as_ref(),
                     )
@@ -102,7 +104,7 @@ impl Reddit {
                             Err(_) => return Err(RedditError::ParsingError),
                         };
                         if let Type::Listing(listing) = reponse {
-                            let after = dbg!(listing.after);
+                            let after = listing.after;
                             for res_link in listing.children.into_iter().map(|child| {
                                 if let Type::Link(link) = child {
                                     return Ok(link);
@@ -156,6 +158,7 @@ pub struct Link {
     score: i64,
 }
 
+#[derive(Debug)]
 pub struct Sort(&'static str);
 
 impl Sort {
@@ -163,6 +166,21 @@ impl Sort {
     pub const BEST: Sort = Sort("/best");
     pub const TOP: Sort = Sort("/top");
     pub const CONTROVERSIAL: Sort = Sort("/controversial");
+
+    fn as_str(&self) -> &'static str {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct MaxTime(&'static str);
+
+impl MaxTime {
+    pub const ALL: MaxTime = MaxTime("all");
+    pub const YEAR: MaxTime = MaxTime("year");
+    pub const MONTH: MaxTime = MaxTime("month");
+    pub const WEEK: MaxTime = MaxTime("week");
+    pub const DAY: MaxTime = MaxTime("day");
 
     fn as_str(&self) -> &'static str {
         self.0
