@@ -53,7 +53,7 @@ impl Reddit {
             .map_err(|_| RedditError::NetworkError)
             .and_then(|response| {
                 if !response.status().is_success() {
-                    return Err(RedditError::ApiError(response.status().as_u16()));
+                    return Err(RedditError::ApiError{error_code: response.status().as_u16()});
                 }
                 Ok(response)
             })
@@ -65,7 +65,7 @@ impl Reddit {
             })
     }
 
-    fn subreddit_posts(
+    pub fn subreddit_posts(
         &self,
         subreddit: String,
         sort: Sort,
@@ -147,15 +147,15 @@ pub struct Listing {
 
 #[derive(Deserialize, Debug)]
 pub struct Link {
-    subreddit: String,
-    title: String,
-    name: String,
-    over_18: bool,
-    pinned: bool,
-    url: String,
-    spoiler: bool,
-    selftext: String,
-    score: i64,
+    pub subreddit: String,
+    pub title: String,
+    pub name: String,
+    pub over_18: bool,
+    pub pinned: bool,
+    pub url: String,
+    pub spoiler: bool,
+    pub selftext: String,
+    pub score: i64,
 }
 
 #[derive(Debug)]

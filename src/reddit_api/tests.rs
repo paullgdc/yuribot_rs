@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::reddit::{Reddit, Sort, Type, MaxTime};
+    use crate::reddit_api::{Reddit, Sort, Type, MaxTime};
     use serde_json;
     use tokio_core;
     #[test]
