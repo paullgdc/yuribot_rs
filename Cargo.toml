@@ -15,3 +15,4 @@ base64 = "0.10"
 tokio-core = "0.1.17"
 telebot = "0.2.10"
 failure = "0.1"
+diesel = { version = "1.4.0", features = ["sqlite"] }
