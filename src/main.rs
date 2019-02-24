@@ -1,46 +1,83 @@
-pub mod reddit_api;
+mod db;
+mod reddit_api;
+
+#[macro_use]
+extern crate diesel;
 
 use failure::Error;
 
+use futures::future::Either;
+use futures::{Future, Stream};
 use telebot::bot;
-use tokio_core::reactor::Core;                       
-use futures::stream::Stream;
-use futures::Future;
-
+use tokio_core::reactor::{Core, Interval};
 
 // import all available functions
-use telebot::functions::*;
+use telebot::file::File;
+use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
 fn main() -> Result<(), Error> {
     let mut reac = Core::new()?;
     let reddit = reddit_api::Reddit::new("rustTelegramBot.0.1".into())?;
-
-    let bot = bot::RcBot::new(reac.handle(), "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI")
+    let database = db::Database::new("backup.sqlite3")?;
+    let bot = bot::RcBot::new(
+        reac.handle(),
+        "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI",
+    )
         .update_interval(200);
-    reac.run(reddit.is_connected())?;
-    let handle = bot.new_cmd("/top")
-        .and_then({let reddit: reddit_api::Reddit = reddit.clone(); move |(bot, msg)| {
-            println!("received message");
-            reddit.subreddit_posts(
-                "wholesomeyuri".into(), 
-                reddit_api::Sort::TOP,
-                reddit_api::MaxTime::ALL,
-                1,
-            )
-            .then(move |posts| {
-                let mut posts = dbg!(posts)?;
-                if posts.len() == 0 {
-                    Ok(bot.message(msg.chat.id, "no post".into()).send())
-                } else {
-                    let reply = dbg!(posts.remove(0).url);
-                    Ok(bot.message(msg.chat.id, reply).send())
-                }
-            })
-            .and_then(|res| res)
-        }});
 
+    reac.run(reddit.is_connected())?;
+    let handle = bot
+        .new_cmd("/top")
+        .and_then({
+            let database: db::Database = database.clone();
+            move |(bot, msg)| {
+                let response = database.fetch_random_link();
+                match response {
+                    Ok(link) => Either::A(
+                        bot.photo(msg.chat.id)
+                            .file(File::Url(link.link))
+                            .caption(link.title)
+                            .send(),
+                    ),
+                    Err(err) => Either::B(
+                        bot.message(msg.chat.id, format!("error : {:?}", err))
+                            .send(),
+                    ),
+                }
+            }
+        })
+        .then(|res| -> Result<(), ()> {
+            if let Err(ref e) = res {
+                println!("e : {:?} --", e)
+            };
+            Ok(())
+        });
+    let pull_link = Interval::new(std::time::Duration::from_secs(2), &reac.handle())?
+        .then({
+            let reddit = reddit.clone();
+            move |_| {
+            reddit.subreddit_posts(
+                    "wholesomeyuri".to_owned(),
+                    reddit_api::Sort::HOT,
+                    reddit_api::MaxTime::DAY,
+                    3,
+            )
+            }
+        })
+        .map_err(|e| Error::from(e))
+        .for_each({
+            let db: db::Database = database.clone();
+            move |links| {
+                for link in links.into_iter() {
+                    db.insert_link(&link.url, &link.title)?;
+                }
+                Ok(())
+            }
+            })
+        .map_err(|_| ());
+    reac.handle().spawn(pull_link);
     bot.register(handle);
-    println!("before running");
+    println!("yuribot started");
     bot.run(&mut reac)?;
     Ok(())
 }
