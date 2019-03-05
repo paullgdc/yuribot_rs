@@ -15,6 +15,10 @@ use tokio_core::reactor::{Core, Interval};
 use telebot::file::File;
 use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
+fn is_image_url(url : &str) -> bool {
+    url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
+}
+
 fn main() -> Result<(), Error> {
     env_logger::Builder::from_env("YURIBOT_LOG").init();
 
@@ -73,7 +77,7 @@ fn main() -> Result<(), Error> {
         .for_each({
             let db: db::Database = database.clone();
             move |links| {
-                for link in links.into_iter() {
+                for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
                     db.insert_link(&link.url, &link.title)?;
                 }
                 Ok(())
