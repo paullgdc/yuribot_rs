@@ -4,6 +4,11 @@ mod reddit_api;
 #[macro_use]
 extern crate diesel;
 
+#[macro_use]
+extern crate log;
+
+use env_logger;
+
 use failure::Error;
 
 use futures::future::Either;
@@ -32,7 +37,7 @@ fn main() -> Result<(), Error> {
         reac.handle(),
         "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI",
     )
-        .update_interval(200);
+    .update_interval(200);
 
     reac.run(reddit.is_connected())?;
     let handle = bot
@@ -41,6 +46,10 @@ fn main() -> Result<(), Error> {
             let database: db::Database = database.clone();
             move |(bot, msg)| {
                 let response = database.fetch_random_link();
+                debug!(
+                    "received message : {:?} \n from chat : {:?} \n responding with {:?}",
+                    msg.text, msg.chat, response
+                );
                 match response {
                     Ok(link) => Either::A(
                         bot.photo(msg.chat.id)
@@ -57,20 +66,20 @@ fn main() -> Result<(), Error> {
         })
         .then(|res| -> Result<(), ()> {
             if let Err(ref e) = res {
-                println!("e : {:?} --", e)
+                error!("error while sending message : {}", e)
             };
             Ok(())
         });
-    let pull_link = Interval::new(std::time::Duration::from_secs(2), &reac.handle())?
+    let pull_link = Interval::new(std::time::Duration::from_secs(10), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
-            reddit.subreddit_posts(
+                reddit.subreddit_posts(
                     "wholesomeyuri".to_owned(),
                     reddit_api::Sort::HOT,
                     reddit_api::MaxTime::DAY,
                     3,
-            )
+                )
             }
         })
         .map_err(|e| Error::from(e))
@@ -78,15 +87,21 @@ fn main() -> Result<(), Error> {
             let db: db::Database = database.clone();
             move |links| {
                 for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
+                    debug!("inserting link in db : {:?}", link);
                     db.insert_link(&link.url, &link.title)?;
                 }
                 Ok(())
             }
-            })
-        .map_err(|_| ());
+        })
+        .map_err(|e| {
+            error!("error while refreshing database : {}", e);
+            ()
+        });
+
     reac.handle().spawn(pull_link);
     bot.register(handle);
-    println!("yuribot started");
+
+    info!("yuribot started");
     bot.run(&mut reac)?;
     Ok(())
 }
