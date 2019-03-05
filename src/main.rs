@@ -16,9 +16,14 @@ use telebot::file::File;
 use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
 fn main() -> Result<(), Error> {
+    env_logger::Builder::from_env("YURIBOT_LOG").init();
+
     let mut reac = Core::new()?;
+
     let reddit = reddit_api::Reddit::new("rustTelegramBot.0.1".into())?;
+
     let database = db::Database::new("backup.sqlite3")?;
+
     let bot = bot::RcBot::new(
         reac.handle(),
         "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI",
