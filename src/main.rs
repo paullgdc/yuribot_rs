@@ -9,18 +9,33 @@ extern crate log;
 
 use env_logger;
 
-use failure::Error;
+use failure::{Error, Fail, ResultExt};
 
 use futures::future::Either;
-use futures::{Future, Stream};
-use telebot::bot;
+use futures::{Future, Stream, IntoFuture};
+
 use tokio_core::reactor::{Core, Interval};
 
 // import all available functions
 use telebot::file::File;
 use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
-fn is_image_url(url : &str) -> bool {
+
+#[derive(Debug, Fail)]
+enum YuribotError {
+    #[fail(display = "failed to parse Yuribot.toml config file")]
+    ConfigParseError,
+    #[fail(display = "failed to open and read from Yuribot.toml config file")]
+    ConfigFileError,
+    #[fail(display = "error while querying the database")]
+    DatabaseError,
+    #[fail(display = "error while sending message to Telegram")]
+    TelegramSendError,
+    #[fail(display = "error with reddit api")]
+    RedditError,
+}
+
+fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
 
@@ -39,38 +54,44 @@ fn main() -> Result<(), Error> {
     )
     .update_interval(200);
 
-    reac.run(reddit.is_connected())?;
+    reac.run(reddit.is_connected())
+        .context(YuribotError::RedditError)?;
     let handle = bot
         .new_cmd("/top")
         .and_then({
             let database: db::Database = database.clone();
             move |(bot, msg)| {
-                let response = database.fetch_random_link();
+                database.fetch_random_link()
+                    .context(YuribotError::DatabaseError)
+                    .into_future()
+                    .then(move |maybe_link| {
                 debug!(
                     "received message : {:?} \n from chat : {:?} \n responding with {:?}",
-                    msg.text, msg.chat, response
+                            msg.text, msg.chat, maybe_link
                 );
-                match response {
+                        match maybe_link {
                     Ok(link) => Either::A(
                         bot.photo(msg.chat.id)
                             .file(File::Url(link.link))
                             .caption(link.title)
                             .send(),
                     ),
-                    Err(err) => Either::B(
-                        bot.message(msg.chat.id, format!("error : {:?}", err))
+                            Err(_) => Either::B(
+                                bot.message(msg.chat.id, "an error happened ¯\\_(ツ)_/¯, maybe retry...".into())
                             .send(),
                     ),
                 }
+                    })
             }
         })
+        .map_err(|e| e.context(YuribotError::TelegramSendError))
         .then(|res| -> Result<(), ()> {
             if let Err(ref e) = res {
-                error!("error while sending message : {}", e)
+                error!("{}", e)
             };
             Ok(())
         });
-    let pull_link = Interval::new(std::time::Duration::from_secs(10), &reac.handle())?
+    let pull_link = Interval::new(std::time::Duration::from_secs(60 * 30), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
@@ -82,19 +103,20 @@ fn main() -> Result<(), Error> {
                 )
             }
         })
-        .map_err(|e| Error::from(e))
+        .map_err(|e| e.context(YuribotError::RedditError))
         .for_each({
             let db: db::Database = database.clone();
             move |links| {
                 for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
                     debug!("inserting link in db : {:?}", link);
-                    db.insert_link(&link.url, &link.title)?;
+                    db.insert_link(&link.url, &link.title)
+                        .context(YuribotError::DatabaseError)?;
                 }
                 Ok(())
             }
         })
         .map_err(|e| {
-            error!("error while refreshing database : {}", e);
+            error!("error while refreshing database : \n {}", e);
             ()
         });
 
