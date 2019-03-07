@@ -1,11 +1,11 @@
-mod db;
-mod reddit_api;
-
 #[macro_use]
 extern crate diesel;
 
 #[macro_use]
 extern crate log;
+
+mod db;
+mod reddit_api;
 
 use env_logger;
 
@@ -20,6 +20,7 @@ use toml;
 
 use serde_derive::Deserialize;
 
+use telebot::bot;
 use telebot::file::File;
 use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
@@ -84,22 +85,22 @@ fn main() -> Result<(), Error> {
                     .context(YuribotError::DatabaseError)
                     .into_future()
                     .then(move |maybe_link| {
-                debug!(
-                    "received message : {:?} \n from chat : {:?} \n responding with {:?}",
+                        debug!(
+                            "received message : {:?} \n from chat : {:?} \n responding with {:?}",
                             msg.text, msg.chat, maybe_link
-                );
+                        );
                         match maybe_link {
-                    Ok(link) => Either::A(
-                        bot.photo(msg.chat.id)
-                            .file(File::Url(link.link))
-                            .caption(link.title)
-                            .send(),
-                    ),
+                            Ok(link) => Either::A(
+                                bot.photo(msg.chat.id)
+                                    .file(File::Url(link.link))
+                                    .caption(link.title)
+                                    .send(),
+                            ),
                             Err(_) => Either::B(
                                 bot.message(msg.chat.id, "an error happened ¯\\_(ツ)_/¯, maybe retry...".into())
-                            .send(),
-                    ),
-                }
+                                    .send(),
+                            ),
+                        }
                     })
             }
         })
