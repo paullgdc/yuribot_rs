@@ -18,3 +18,4 @@ log = "0.4"
 env_logger = "0.6"
 diesel = { version = "1.4.0", features = ["sqlite"] }
 libsqlite3-sys = { version = ">=0.8.0, <0.13.0", features = ["min_sqlite_version_3_7_16", "bundled"] }
+toml = "0.4"

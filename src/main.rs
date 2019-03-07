@@ -16,10 +16,19 @@ use futures::{Future, Stream, IntoFuture};
 
 use tokio_core::reactor::{Core, Interval};
 
-// import all available functions
+use toml;
+
+use serde_derive::Deserialize;
+
 use telebot::file::File;
 use telebot::functions::{FunctionSendMessage, FunctionSendPhoto};
 
+#[derive(Debug, Deserialize)]
+struct Config {
+    database_path: String,
+    bot_token: String,
+    reddit_user_agent: String,
+}
 
 #[derive(Debug, Fail)]
 enum YuribotError {
@@ -35,6 +44,12 @@ enum YuribotError {
     RedditError,
 }
 
+fn read_config_file(path: &str) -> Result<Config, Error> {
+    let bytes = std::fs::read(path).context(YuribotError::ConfigFileError)?;
+    toml::from_slice(&bytes).context(YuribotError::ConfigParseError)
+        .map_err(|e| e.into())
+}
+
 fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
@@ -42,15 +57,19 @@ fn is_image_url(url: &str) -> bool {
 fn main() -> Result<(), Error> {
     env_logger::Builder::from_env("YURIBOT_LOG").init();
 
+    let conf: Config = read_config_file("Yuribot.toml")?;
+
     let mut reac = Core::new()?;
 
-    let reddit = reddit_api::Reddit::new("rustTelegramBot.0.1".into())?;
+    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
+        .context(YuribotError::DatabaseError)?;
 
-    let database = db::Database::new("backup.sqlite3")?;
+    let database = db::Database::new(&conf.database_path)
+        .context(YuribotError::DatabaseError)?;
 
     let bot = bot::RcBot::new(
         reac.handle(),
-        "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI",
+        &conf.bot_token,
     )
     .update_interval(200);
 
