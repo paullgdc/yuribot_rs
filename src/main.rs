@@ -29,6 +29,7 @@ struct Config {
     database_path: String,
     bot_token: String,
     reddit_user_agent: String,
+    send_photo_command: String,
 }
 
 #[derive(Debug, Fail)]
@@ -77,7 +78,7 @@ fn main() -> Result<(), Error> {
     reac.run(reddit.is_connected())
         .context(YuribotError::RedditError)?;
     let handle = bot
-        .new_cmd("/top")
+        .new_cmd(&conf.send_photo_command)
         .and_then({
             let database: db::Database = database.clone();
             move |(bot, msg)| {
@@ -107,7 +108,7 @@ fn main() -> Result<(), Error> {
         .map_err(|e| e.context(YuribotError::TelegramSendError))
         .then(|res| -> Result<(), ()> {
             if let Err(ref e) = res {
-                error!("{}", e)
+                error!("error reponding to /more: {}", e)
             };
             Ok(())
         });

@@ -1,0 +1,4 @@
+database_path = "yuribot_rs.sqlite3"
+bot_token = "<enter your bot token here>"
+reddit_user_agent = "Yuribot_rs/0.1"
+send_photo_command = "/pic"
