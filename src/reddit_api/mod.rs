@@ -25,7 +25,7 @@ pub struct Reddit {
 
 impl Reddit {
     pub fn new(user_agent: String) -> Result<Self, RedditError> {
-        let client: Client<HttpsConnector<_>, Body> = HttpsConnector::new(4)
+        let client: Client<HttpsConnector<_>, Body> = HttpsConnector::new(1)
             .map_err(|_| RedditError::NetworkError)
             .map(|https| Client::builder().build(https))?;
         Ok(Reddit {
