@@ -7,12 +7,14 @@ extern crate log;
 mod db;
 mod reddit_api;
 
+use std::time::Duration;
+
 use env_logger;
 
 use failure::{Error, Fail, ResultExt};
 
 use futures::future::Either;
-use futures::{Future, Stream, IntoFuture};
+use futures::{Future, IntoFuture, Stream};
 
 use tokio_core::reactor::{Core, Interval};
 
@@ -48,7 +50,8 @@ enum YuribotError {
 
 fn read_config_file(path: &str) -> Result<Config, Error> {
     let bytes = std::fs::read(path).context(YuribotError::ConfigFileError)?;
-    toml::from_slice(&bytes).context(YuribotError::ConfigParseError)
+    toml::from_slice(&bytes)
+        .context(YuribotError::ConfigParseError)
         .map_err(|e| e.into())
 }
 
@@ -56,24 +59,37 @@ fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
 
-fn main() -> Result<(), Error> {
-    env_logger::Builder::from_env("YURIBOT_LOG").init();
-
-    let conf: Config = read_config_file("Yuribot.toml")?;
-
-    let mut reac = Core::new()?;
-
-    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
+fn fill_database(
+    mut reac: Core,
+    conf: Config,
+    reddit: reddit_api::Reddit,
+    database: db::Database,
+) -> Result<(), Error> {
+    let fut = reddit.subreddit_posts(
+        "wholesomeyuri".to_owned(),
+        reddit_api::Sort::BEST,
+        reddit_api::MaxTime::ALL,
+        200,
+    ).map_err(|e| e.context(YuribotError::RedditError))
+    .and_then(|links| {
+        for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
+            debug!("inserting link in db : {:?}", link);
+            database.insert_link(&link.url, &link.title)
         .context(YuribotError::DatabaseError)?;
+        }
+        Ok(())
+    });
+    reac.run(fut)?;
+    Ok(())
+}
 
-    let database = db::Database::new(&conf.database_path)
-        .context(YuribotError::DatabaseError)?;
-
-    let bot = bot::RcBot::new(
-        reac.handle(),
-        &conf.bot_token,
-    )
-    .update_interval(200);
+fn run_bot(
+    mut reac: Core,
+    conf: Config,
+    reddit: reddit_api::Reddit,
+    database: db::Database,
+) -> Result<(), Error> {
+    let bot = bot::RcBot::new(reac.handle(), &conf.bot_token).update_interval(200);
 
     reac.run(reddit.is_connected())
         .context(YuribotError::RedditError)?;
@@ -82,7 +98,8 @@ fn main() -> Result<(), Error> {
         .and_then({
             let database: db::Database = database.clone();
             move |(bot, msg)| {
-                database.fetch_random_link()
+                database
+                    .fetch_random_link()
                     .context(YuribotError::DatabaseError)
                     .into_future()
                     .then(move |maybe_link| {
@@ -98,7 +115,10 @@ fn main() -> Result<(), Error> {
                                     .send(),
                             ),
                             Err(_) => Either::B(
-                                bot.message(msg.chat.id, "an error happened ¯\\_(ツ)_/¯, maybe retry...".into())
+                                bot.message(
+                                    msg.chat.id,
+                                    "an error happened ¯\\_(ツ)_/¯, maybe retry...".into(),
+                                )
                                     .send(),
                             ),
                         }
@@ -116,6 +136,7 @@ fn main() -> Result<(), Error> {
         .then({
             let reddit = reddit.clone();
             move |_| {
+                debug!("started fetchin redit links to update db");
                 reddit.subreddit_posts(
                     "wholesomeyuri".to_owned(),
                     reddit_api::Sort::HOT,
@@ -147,4 +168,19 @@ fn main() -> Result<(), Error> {
     info!("yuribot started");
     bot.run(&mut reac)?;
     Ok(())
+}
+
+fn main() -> Result<(), Error> {
+    env_logger::Builder::from_env("YURIBOT_LOG").init();
+
+    let conf: Config = read_config_file("Yuribot.toml")?;
+
+    let reac = Core::new()?;
+
+    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
+        .context(YuribotError::DatabaseError)?;
+
+    let database = db::Database::new(&conf.database_path).context(YuribotError::DatabaseError)?;
+
+    run_bot(reac, conf, reddit, database)
 }
