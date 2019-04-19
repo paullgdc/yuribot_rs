@@ -85,7 +85,7 @@ impl Reddit {
                             "/r/{}{}.json?limit={}&after={}&t={}",
                             subreddit,
                             sort.as_str(),
-                            if limit > 15 { 15 } else { limit },
+                            if limit > 25 { 25 } else { limit },
                             after,
                             max_time.as_str(),
                         )
@@ -116,7 +116,7 @@ impl Reddit {
                                     Err(_) => return Err(RedditError::UnexpectedResponse),
                                 }
                             }
-                            let limit = limit.checked_sub(15).unwrap_or(0);
+                            let limit = limit.checked_sub(25).unwrap_or(0);
                             return if limit > 0 {
                                 Ok(Loop::Continue((limit, after, results)))
                             } else {

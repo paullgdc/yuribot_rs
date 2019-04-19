@@ -61,22 +61,32 @@ fn is_image_url(url: &str) -> bool {
 
 fn fill_database(
     mut reac: Core,
-    conf: Config,
+    _conf: Config,
     reddit: reddit_api::Reddit,
     database: db::Database,
 ) -> Result<(), Error> {
-    let fut = reddit.subreddit_posts(
+    let fut = reddit
+        .subreddit_posts(
         "wholesomeyuri".to_owned(),
         reddit_api::Sort::BEST,
         reddit_api::MaxTime::ALL,
         200,
-    ).map_err(|e| e.context(YuribotError::RedditError))
+        )
+        .map_err(|e| e.context(YuribotError::RedditError))
     .and_then(|links| {
-        for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
-            debug!("inserting link in db : {:?}", link);
-            database.insert_link(&link.url, &link.title)
+            debug!("inserting links in database\n {:?}", links);
+            database
+                .insert_links(
+                    &links
+                        .iter()
+                        .filter(|link| is_image_url(&link.url))
+                        .map(|link| db::model::NewLink {
+                            link: &link.url,
+                            title: &link.title,
+                        })
+                        .collect::<Vec<db::model::NewLink>>(),
+                )
         .context(YuribotError::DatabaseError)?;
-        }
         Ok(())
     });
     reac.run(fut)?;
@@ -149,11 +159,19 @@ fn run_bot(
         .for_each({
             let db: db::Database = database.clone();
             move |links| {
-                for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
-                    debug!("inserting link in db : {:?}", link);
-                    db.insert_link(&link.url, &link.title)
+                debug!("inserting links in database\n {:?}", links);
+                database
+                    .insert_links(
+                        &links
+                            .iter()
+                            .filter(|link| is_image_url(&link.url))
+                            .map(|link| db::model::NewLink {
+                                link: &link.url,
+                                title: &link.title,
+                            })
+                            .collect::<Vec<db::model::NewLink>>(),
+                    )
                         .context(YuribotError::DatabaseError)?;
-                }
                 Ok(())
             }
         })
