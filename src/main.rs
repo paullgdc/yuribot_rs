@@ -59,7 +59,7 @@ fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
 
-fn fill_database(
+fn seed_database(
     mut reac: Core,
     _conf: Config,
     reddit: reddit_api::Reddit,
@@ -142,7 +142,7 @@ fn run_bot(
             };
             Ok(())
         });
-    let pull_link = Interval::new(std::time::Duration::from_secs(60 * 30), &reac.handle())?
+    let pull_link = Interval::new(Duration::from_secs(60 * 30), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
@@ -157,7 +157,6 @@ fn run_bot(
         })
         .map_err(|e| e.context(YuribotError::RedditError))
         .for_each({
-            let db: db::Database = database.clone();
             move |links| {
                 debug!("inserting links in database\n {:?}", links);
                 database
