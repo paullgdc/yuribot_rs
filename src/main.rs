@@ -67,13 +67,13 @@ fn seed_database(
 ) -> Result<(), Error> {
     let fut = reddit
         .subreddit_posts(
-        "wholesomeyuri".to_owned(),
-        reddit_api::Sort::BEST,
-        reddit_api::MaxTime::ALL,
-        200,
+            "wholesomeyuri".to_owned(),
+            reddit_api::Sort::BEST,
+            reddit_api::MaxTime::ALL,
+            200,
         )
         .map_err(|e| e.context(YuribotError::RedditError))
-    .and_then(|links| {
+        .and_then(|links| {
             debug!("inserting links in database\n {:?}", links);
             database
                 .insert_links(
@@ -86,9 +86,9 @@ fn seed_database(
                         })
                         .collect::<Vec<db::model::NewLink>>(),
                 )
-        .context(YuribotError::DatabaseError)?;
-        Ok(())
-    });
+                .context(YuribotError::DatabaseError)?;
+            Ok(())
+        });
     reac.run(fut)?;
     Ok(())
 }
@@ -129,7 +129,7 @@ fn run_bot(
                                     msg.chat.id,
                                     "an error happened ¯\\_(ツ)_/¯, maybe retry...".into(),
                                 )
-                                    .send(),
+                                .send(),
                             ),
                         }
                     })
@@ -170,7 +170,7 @@ fn run_bot(
                             })
                             .collect::<Vec<db::model::NewLink>>(),
                     )
-                        .context(YuribotError::DatabaseError)?;
+                    .context(YuribotError::DatabaseError)?;
                 Ok(())
             }
         })
@@ -188,6 +188,14 @@ fn run_bot(
 }
 
 fn main() -> Result<(), Error> {
+    let args: Vec<String> = std::env::args().collect();
+    let opts = {
+        let mut opts = getopts::Options::new();
+        opts.optflag("", "seed", "initializes the database with pics from /top");
+        opts.optflag("h", "help", "prints the help");
+        opts
+    };
+
     env_logger::Builder::from_env("YURIBOT_LOG").init();
 
     let conf: Config = read_config_file("Yuribot.toml")?;
@@ -199,5 +207,20 @@ fn main() -> Result<(), Error> {
 
     let database = db::Database::new(&conf.database_path).context(YuribotError::DatabaseError)?;
 
-    run_bot(reac, conf, reddit, database)
+    let matches: getopts::Matches = match opts.parse(args) {
+        Ok(m) => m,
+        Err(fail) => {
+            println!("{}", opts.usage(&format!("{}", fail)));
+            return Ok(());
+        },
+    };
+    if matches.opt_present("help") {
+        println!("{}", opts.usage(""));
+        return Ok(());
+    }
+    if matches.opt_present("seed") {
+        seed_database(reac, conf, reddit, database)
+    } else {
+        run_bot(reac, conf, reddit, database)
+    }
 }

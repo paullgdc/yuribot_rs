@@ -18,6 +18,7 @@ impl Database {
         })
     }
 
+    #[allow(dead_code)]
     pub fn insert_link<'a>(&self, link : &'a str, title : &'a str) -> Result<usize, Error>{
         let new_link = model::NewLink {
             link,
