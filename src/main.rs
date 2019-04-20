@@ -60,6 +60,7 @@ fn is_image_url(url: &str) -> bool {
 }
 
 fn seed_database(
+    nb_posts: usize,
     mut reac: Core,
     _conf: Config,
     reddit: reddit_api::Reddit,
@@ -70,7 +71,7 @@ fn seed_database(
             "wholesomeyuri".to_owned(),
             reddit_api::Sort::BEST,
             reddit_api::MaxTime::ALL,
-            200,
+            nb_posts,
         )
         .map_err(|e| e.context(YuribotError::RedditError))
         .and_then(|links| {
@@ -191,7 +192,14 @@ fn main() -> Result<(), Error> {
     let args: Vec<String> = std::env::args().collect();
     let opts = {
         let mut opts = getopts::Options::new();
-        opts.optflag("", "seed", "initializes the database with pics from /top");
+        opts.opt(
+            "s",
+            "seed",
+            "initializes the database with pics from /top, defaults to 200 if no number is supplied",
+            "N",
+            getopts::HasArg::Maybe,
+            getopts::Occur::Optional,
+        );
         opts.optflag("h", "help", "prints the help");
         opts
     };
@@ -212,14 +220,24 @@ fn main() -> Result<(), Error> {
         Err(fail) => {
             println!("{}", opts.usage(&format!("{}", fail)));
             return Ok(());
-        },
+        }
     };
     if matches.opt_present("help") {
         println!("{}", opts.usage(""));
         return Ok(());
     }
     if matches.opt_present("seed") {
-        seed_database(reac, conf, reddit, database)
+        let nb_posts = match matches.opt_get_default::<usize>("seed", 200_usize) {
+            Ok(i) => i,
+            Err(_) => {
+                println!(
+                    "{}",
+                    opts.usage("failed to parse --seed argument to integer")
+                );
+                return Ok(());
+            }
+        };
+        seed_database(nb_posts, reac, conf, reddit, database)
     } else {
         run_bot(reac, conf, reddit, database)
     }
