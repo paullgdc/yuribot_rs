@@ -7,12 +7,14 @@ extern crate log;
 mod db;
 mod reddit_api;
 
+use std::time::Duration;
+
 use env_logger;
 
 use failure::{Error, Fail, ResultExt};
 
 use futures::future::Either;
-use futures::{Future, Stream, IntoFuture};
+use futures::{Future, IntoFuture, Stream};
 
 use tokio_core::reactor::{Core, Interval};
 
@@ -48,7 +50,8 @@ enum YuribotError {
 
 fn read_config_file(path: &str) -> Result<Config, Error> {
     let bytes = std::fs::read(path).context(YuribotError::ConfigFileError)?;
-    toml::from_slice(&bytes).context(YuribotError::ConfigParseError)
+    toml::from_slice(&bytes)
+        .context(YuribotError::ConfigParseError)
         .map_err(|e| e.into())
 }
 
@@ -56,24 +59,48 @@ fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
 
-fn main() -> Result<(), Error> {
-    env_logger::Builder::from_env("YURIBOT_LOG").init();
+fn seed_database(
+    nb_posts: usize,
+    mut reac: Core,
+    _conf: Config,
+    reddit: reddit_api::Reddit,
+    database: db::Database,
+) -> Result<(), Error> {
+    let fut = reddit
+        .subreddit_posts(
+            "wholesomeyuri".to_owned(),
+            reddit_api::Sort::BEST,
+            reddit_api::MaxTime::ALL,
+            nb_posts,
+        )
+        .map_err(|e| e.context(YuribotError::RedditError))
+        .and_then(|links| {
+            debug!("inserting links in database\n {:?}", links);
+            database
+                .insert_links(
+                    &links
+                        .iter()
+                        .filter(|link| is_image_url(&link.url))
+                        .map(|link| db::model::NewLink {
+                            link: &link.url,
+                            title: &link.title,
+                        })
+                        .collect::<Vec<db::model::NewLink>>(),
+                )
+                .context(YuribotError::DatabaseError)?;
+            Ok(())
+        });
+    reac.run(fut)?;
+    Ok(())
+}
 
-    let conf: Config = read_config_file("Yuribot.toml")?;
-
-    let mut reac = Core::new()?;
-
-    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
-        .context(YuribotError::DatabaseError)?;
-
-    let database = db::Database::new(&conf.database_path)
-        .context(YuribotError::DatabaseError)?;
-
-    let bot = bot::RcBot::new(
-        reac.handle(),
-        &conf.bot_token,
-    )
-    .update_interval(200);
+fn run_bot(
+    mut reac: Core,
+    conf: Config,
+    reddit: reddit_api::Reddit,
+    database: db::Database,
+) -> Result<(), Error> {
+    let bot = bot::RcBot::new(reac.handle(), &conf.bot_token).update_interval(200);
 
     reac.run(reddit.is_connected())
         .context(YuribotError::RedditError)?;
@@ -82,7 +109,8 @@ fn main() -> Result<(), Error> {
         .and_then({
             let database: db::Database = database.clone();
             move |(bot, msg)| {
-                database.fetch_random_link()
+                database
+                    .fetch_random_link()
                     .context(YuribotError::DatabaseError)
                     .into_future()
                     .then(move |maybe_link| {
@@ -98,8 +126,11 @@ fn main() -> Result<(), Error> {
                                     .send(),
                             ),
                             Err(_) => Either::B(
-                                bot.message(msg.chat.id, "an error happened ¯\\_(ツ)_/¯, maybe retry...".into())
-                                    .send(),
+                                bot.message(
+                                    msg.chat.id,
+                                    "an error happened ¯\\_(ツ)_/¯, maybe retry...".into(),
+                                )
+                                .send(),
                             ),
                         }
                     })
@@ -112,10 +143,11 @@ fn main() -> Result<(), Error> {
             };
             Ok(())
         });
-    let pull_link = Interval::new(std::time::Duration::from_secs(60 * 30), &reac.handle())?
+    let pull_link = Interval::new(Duration::from_secs(60 * 30), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
+                debug!("started fetchin redit links to update db");
                 reddit.subreddit_posts(
                     "wholesomeyuri".to_owned(),
                     reddit_api::Sort::HOT,
@@ -126,13 +158,20 @@ fn main() -> Result<(), Error> {
         })
         .map_err(|e| e.context(YuribotError::RedditError))
         .for_each({
-            let db: db::Database = database.clone();
             move |links| {
-                for link in links.into_iter().filter(|link| is_image_url(&link.url)) {
-                    debug!("inserting link in db : {:?}", link);
-                    db.insert_link(&link.url, &link.title)
-                        .context(YuribotError::DatabaseError)?;
-                }
+                debug!("inserting links in database\n {:?}", links);
+                database
+                    .insert_links(
+                        &links
+                            .iter()
+                            .filter(|link| is_image_url(&link.url))
+                            .map(|link| db::model::NewLink {
+                                link: &link.url,
+                                title: &link.title,
+                            })
+                            .collect::<Vec<db::model::NewLink>>(),
+                    )
+                    .context(YuribotError::DatabaseError)?;
                 Ok(())
             }
         })
@@ -147,4 +186,59 @@ fn main() -> Result<(), Error> {
     info!("yuribot started");
     bot.run(&mut reac)?;
     Ok(())
+}
+
+fn main() -> Result<(), Error> {
+    let args: Vec<String> = std::env::args().collect();
+    let opts = {
+        let mut opts = getopts::Options::new();
+        opts.opt(
+            "s",
+            "seed",
+            "initializes the database with pics from /top, defaults to 200 if no number is supplied",
+            "N",
+            getopts::HasArg::Maybe,
+            getopts::Occur::Optional,
+        );
+        opts.optflag("h", "help", "prints the help");
+        opts
+    };
+
+    env_logger::Builder::from_env("YURIBOT_LOG").init();
+
+    let conf: Config = read_config_file("Yuribot.toml")?;
+
+    let reac = Core::new()?;
+
+    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
+        .context(YuribotError::DatabaseError)?;
+
+    let database = db::Database::new(&conf.database_path).context(YuribotError::DatabaseError)?;
+
+    let matches: getopts::Matches = match opts.parse(args) {
+        Ok(m) => m,
+        Err(fail) => {
+            println!("{}", opts.usage(&format!("{}", fail)));
+            return Ok(());
+        }
+    };
+    if matches.opt_present("help") {
+        println!("{}", opts.usage(""));
+        return Ok(());
+    }
+    if matches.opt_present("seed") {
+        let nb_posts = match matches.opt_get_default::<usize>("seed", 200_usize) {
+            Ok(i) => i,
+            Err(_) => {
+                println!(
+                    "{}",
+                    opts.usage("failed to parse --seed argument to integer")
+                );
+                return Ok(());
+            }
+        };
+        seed_database(nb_posts, reac, conf, reddit, database)
+    } else {
+        run_bot(reac, conf, reddit, database)
+    }
 }

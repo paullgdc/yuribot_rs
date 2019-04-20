@@ -1,5 +1,5 @@
 mod schema;
-mod model;
+pub mod model;
 mod tests;
 
 use failure::Error;
@@ -18,6 +18,7 @@ impl Database {
         })
     }
 
+    #[allow(dead_code)]
     pub fn insert_link<'a>(&self, link : &'a str, title : &'a str) -> Result<usize, Error>{
         let new_link = model::NewLink {
             link,
@@ -25,6 +26,13 @@ impl Database {
         };
         diesel::insert_or_ignore_into(schema::links::table)
             .values(new_link)
+            .execute(&*self.connection)
+            .map_err(|e| e.into())
+    }
+
+    pub fn insert_links<'a>(&self, new_links: &[model::NewLink<'a>]) -> Result<usize, Error>{
+        diesel::insert_or_ignore_into(schema::links::table)
+            .values(new_links)
             .execute(&*self.connection)
             .map_err(|e| e.into())
     }
