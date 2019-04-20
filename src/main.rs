@@ -210,8 +210,12 @@ fn main() -> Result<(), Error> {
 
     let reac = Core::new()?;
 
-    let reddit = reddit_api::Reddit::new(conf.reddit_user_agent.clone())
-        .context(YuribotError::DatabaseError)?;
+    let reddit = reddit_api::Reddit::new(
+        conf.reddit_user_agent.clone(),
+        Duration::from_secs(10),
+        reac.handle(),
+    )
+    .context(YuribotError::DatabaseError)?;
 
     let database = db::Database::new(&conf.database_path).context(YuribotError::DatabaseError)?;
 

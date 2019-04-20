@@ -3,6 +3,7 @@ mod tests;
 pub use errors::RedditError;
 
 use std::rc::*;
+use std::time::Duration;
 
 use futures::{
     future::{loop_fn, IntoFuture, Loop},
@@ -11,11 +12,14 @@ use futures::{
 use hyper::{client::HttpConnector, header::USER_AGENT, Body, Chunk, Client, Method, Request, Uri};
 use hyper_tls::HttpsConnector;
 use serde_derive::Deserialize;
+use tokio_core::reactor::{Handle, Timeout};
 
 #[derive(Debug)]
 struct Inner {
     user_agent: String,
     client: Client<HttpsConnector<HttpConnector>>,
+    handle: Handle,
+    timeout: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -24,12 +28,17 @@ pub struct Reddit {
 }
 
 impl Reddit {
-    pub fn new(user_agent: String) -> Result<Self, RedditError> {
+    pub fn new(user_agent: String, timeout: Duration, handle: Handle) -> Result<Self, RedditError> {
         let client: Client<HttpsConnector<_>, Body> = HttpsConnector::new(1)
             .map_err(|_| RedditError::NetworkError)
             .map(|https| Client::builder().build(https))?;
         Ok(Reddit {
-            inner: Rc::new(Inner { user_agent, client }),
+            inner: Rc::new(Inner {
+                user_agent,
+                client,
+                handle,
+                timeout,
+            }),
         })
     }
 
@@ -53,7 +62,9 @@ impl Reddit {
             .map_err(|_| RedditError::NetworkError)
             .and_then(|response| {
                 if !response.status().is_success() {
-                    return Err(RedditError::ApiError{error_code: response.status().as_u16()});
+                    return Err(RedditError::ApiError {
+                        error_code: response.status().as_u16(),
+                    });
                 }
                 Ok(response)
             })
@@ -62,6 +73,19 @@ impl Reddit {
                     .into_body()
                     .concat2()
                     .map_err(|_| RedditError::NetworkError)
+            })
+            .select(
+                Timeout::new(self.inner.timeout, &self.inner.handle)
+                    .into_future()
+                    .map_err(|e| RedditError::IoError(e))
+                    .map(|timeout| timeout.then(|_| Err(RedditError::Timeout)))
+                    .flatten()
+            )
+            .then(|result| {
+                match result {
+                    Ok(item_fut) => Ok(item_fut.0),
+                    Err(error_fut) => Err(error_fut.0)
+                }
             })
     }
 
