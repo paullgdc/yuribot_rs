@@ -143,7 +143,7 @@ fn run_bot(
             };
             Ok(())
         });
-    let pull_link = Interval::new(Duration::from_secs(60 * 30), &reac.handle())?
+    let pull_link = Interval::new(Duration::from_secs(10), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
@@ -157,7 +157,7 @@ fn run_bot(
             }
         })
         .map_err(|e| e.context(YuribotError::RedditError))
-        .for_each({
+        .and_then({
             move |links| {
                 debug!("inserting links in database\n {:?}", links);
                 database
@@ -175,10 +175,13 @@ fn run_bot(
                 Ok(())
             }
         })
-        .map_err(|e| {
-            error!("error while refreshing database : \n {}", e);
-            ()
-        });
+        .then(|res| -> Result<(), ()> {
+            if let Err(ref e) = res {
+                error!("error while refreshing database : \n {}", e);
+            };
+            Ok(())
+        })
+        .for_each(|_| Ok(()));
 
     reac.handle().spawn(pull_link);
     bot.register(handle);
