@@ -143,7 +143,7 @@ fn run_bot(
             };
             Ok(())
         });
-    let pull_link = Interval::new(Duration::from_secs(10), &reac.handle())?
+    let pull_link = Interval::new(Duration::from_secs(30*60), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
