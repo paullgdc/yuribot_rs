@@ -147,7 +147,7 @@ fn run_bot(
         .then({
             let reddit = reddit.clone();
             move |_| {
-                debug!("started fetchin redit links to update db");
+                debug!("started fetching reddit links to update database");
                 reddit.subreddit_posts(
                     "wholesomeyuri".to_owned(),
                     reddit_api::Sort::HOT,
