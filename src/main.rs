@@ -69,7 +69,7 @@ fn seed_database(
     let fut = reddit
         .subreddit_posts(
             "wholesomeyuri".to_owned(),
-            reddit_api::Sort::BEST,
+            reddit_api::Sort::TOP,
             reddit_api::MaxTime::ALL,
             nb_posts,
         )
