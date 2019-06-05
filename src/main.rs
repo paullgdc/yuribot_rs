@@ -94,21 +94,11 @@ fn seed_database(
     Ok(())
 }
 
-fn run_bot(
-    mut reac: Core,
-    conf: Config,
-    reddit: reddit_api::Reddit,
-    database: db::Database,
-) -> Result<(), Error> {
-    let bot = bot::RcBot::new(reac.handle(), &conf.bot_token).update_interval(200);
-
-    reac.run(reddit.is_connected())
-        .context(YuribotError::RedditError)?;
-    let handle = bot
-        .new_cmd(&conf.send_photo_command)
-        .and_then({
-            let database: db::Database = database.clone();
-            move |(bot, msg)| {
+fn respond_to_message(
+    bot: bot::RcBot,
+    msg: telebot::objects::Message,
+    database: &db::Database,
+) -> impl Future<Item = (), Error = ()> {
                 database
                     .fetch_random_link()
                     .context(YuribotError::DatabaseError)
@@ -134,14 +124,38 @@ fn run_bot(
                             ),
                         }
                     })
-            }
-        })
         .map_err(|e| e.context(YuribotError::TelegramSendError))
         .then(|res| -> Result<(), ()> {
             if let Err(ref e) = res {
                 error!("error reponding to /more: {}", e)
             };
             Ok(())
+        })
+}
+
+fn run_bot(
+    mut reac: Core,
+    conf: Config,
+    reddit: reddit_api::Reddit,
+    database: db::Database,
+) -> Result<(), Error> {
+    let bot = bot::RcBot::new(reac.handle(), &conf.bot_token).update_interval(1000);
+
+    reac.run(reddit.is_connected())
+        .context(YuribotError::RedditError)?;
+    let handle = bot
+        .new_cmd(&conf.send_photo_command)
+        .then({
+            let database: db::Database = database.clone();
+            let reactor_handle = reac.handle();
+            move |res| -> Result<(), ()> {
+                match res {
+                    Ok((bot, msg)) => reactor_handle.spawn(respond_to_message(bot, msg, &database)),
+                    Err(ref e) => error!("error in message update: {}", e),
+
+                };
+                Ok(())
+            }
         });
     let pull_link = Interval::new(Duration::from_secs(30*60), &reac.handle())?
         .then({
