@@ -99,31 +99,31 @@ fn respond_to_message(
     msg: telebot::objects::Message,
     database: &db::Database,
 ) -> impl Future<Item = (), Error = ()> {
-                database
-                    .fetch_random_link()
-                    .context(YuribotError::DatabaseError)
-                    .into_future()
-                    .then(move |maybe_link| {
-                        debug!(
-                            "received message : {:?} \n from chat : {:?} \n responding with {:?}",
-                            msg.text, msg.chat, maybe_link
-                        );
-                        match maybe_link {
-                            Ok(link) => Either::A(
-                                bot.photo(msg.chat.id)
-                                    .file(File::Url(link.link))
-                                    .caption(link.title)
-                                    .send(),
-                            ),
-                            Err(_) => Either::B(
-                                bot.message(
-                                    msg.chat.id,
-                                    "an error happened ¯\\_(ツ)_/¯, maybe retry...".into(),
-                                )
-                                .send(),
-                            ),
-                        }
-                    })
+    database
+        .fetch_random_link()
+        .context(YuribotError::DatabaseError)
+        .into_future()
+        .then(move |maybe_link| {
+            debug!(
+                "received message : {:?} \n from chat : {:?} \n responding with {:?}",
+                msg.text, msg.chat, maybe_link
+            );
+            match maybe_link {
+                Ok(link) => Either::A(
+                    bot.photo(msg.chat.id)
+                        .file(File::Url(link.link))
+                        .caption(link.title)
+                        .send(),
+                ),
+                Err(_) => Either::B(
+                    bot.message(
+                        msg.chat.id,
+                        "an error happened ¯\\_(ツ)_/¯, maybe retry...".into(),
+                    )
+                    .send(),
+                ),
+            }
+        })
         .map_err(|e| e.context(YuribotError::TelegramSendError))
         .then(|res| -> Result<(), ()> {
             if let Err(ref e) = res {
@@ -143,21 +143,18 @@ fn run_bot(
 
     reac.run(reddit.is_connected())
         .context(YuribotError::RedditError)?;
-    let handle = bot
-        .new_cmd(&conf.send_photo_command)
-        .then({
-            let database: db::Database = database.clone();
-            let reactor_handle = reac.handle();
-            move |res| -> Result<(), ()> {
-                match res {
-                    Ok((bot, msg)) => reactor_handle.spawn(respond_to_message(bot, msg, &database)),
-                    Err(ref e) => error!("error in message update: {}", e),
-
-                };
-                Ok(())
-            }
-        });
-    let pull_link = Interval::new(Duration::from_secs(30*60), &reac.handle())?
+    let handle = bot.new_cmd(&conf.send_photo_command).then({
+        let database: db::Database = database.clone();
+        let reactor_handle = reac.handle();
+        move |res| -> Result<(), ()> {
+            match res {
+                Ok((bot, msg)) => reactor_handle.spawn(respond_to_message(bot, msg, &database)),
+                Err(ref e) => error!("error in message update: {}", e),
+            };
+            Ok(())
+        }
+    });
+    let pull_link = Interval::new(Duration::from_secs(30 * 60), &reac.handle())?
         .then({
             let reddit = reddit.clone();
             move |_| {
