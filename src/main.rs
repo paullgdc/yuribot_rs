@@ -187,7 +187,17 @@ fn run_bot(
     bot.register(handle);
 
     info!("yuribot started");
-    bot.run(&mut reac)?;
+    bot.resolve_name();
+    let _ = reac.run(
+        bot.get_stream()
+            .then(|res| -> Result<(), ()> {
+                if let Err(e) = res {
+                    error!("error while handling the update stream: {}", e);
+                };
+                Ok(())
+            })
+            .for_each(|_| Ok(())),
+    );
     Ok(())
 }
 
