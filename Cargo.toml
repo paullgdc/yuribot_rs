@@ -5,17 +5,15 @@ authors = ["Paul Le Grand Des Cloizeaux <paul.legranddec@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-futures = "0.1.25"
-hyper = "0.12"
-hyper-tls = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-tokio-core = "0.1.17"
-telebot = { git = "https://github.com/bytesnake/telebot", rev = "5c80581" }
-failure = "0.1"
+thiserror = "1.0"
 log = "0.4"
 env_logger = "0.6"
+tokio = "0.2.0-alpha.6"
+hyper = { version = "=0.13.0-alpha.4"}
+hyper-tls = { version = "=0.4.0-alpha.4" }
 diesel = { version = "1.4.0", features = ["sqlite"] }
 libsqlite3-sys = { version = ">=0.8.0, <0.13.0", features = ["min_sqlite_version_3_7_16", "bundled"] }
 toml = "0.4"
