@@ -6,6 +6,7 @@ use errors::Result;
 use std::rc::*;
 use std::time::Duration;
 
+use guard::guard;
 use hyper::{client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri};
 use hyper_tls::HttpsConnector;
 use serde_derive::Deserialize;
@@ -107,23 +108,19 @@ impl Reddit {
                 .build()
                 .map_err(|_| RedditError::ParsingError)?;
             let data = self.api_call(uri).await?;
-            let response = serde_json::from_slice::<Type>(&data)
-                .map_err(|_| RedditError::ParsingError)?;
-            if let Type::Listing(listing) = response {
-                let after = listing.after;
-                for res_link in listing.children.into_iter().map(|child| {
-                    if let Type::Link(link) = child {
-                        return Ok(link);
-                    }
-                    Err(RedditError::UnexpectedResponse)
-                }) {
-                    match res_link {
-                        Ok(link) => posts.push(link),
-                        Err(_) => return Err(RedditError::UnexpectedResponse),
-                    }
-                };
-                left = left.checked_sub(25).unwrap_or(0);
+            let response =
+                serde_json::from_slice::<Type>(&data).map_err(|_| RedditError::ParsingError)?;
+            guard!(let Type::Listing(listing) = response else {
+                return Err(RedditError::UnexpectedResponse)
+            });
+            let after = listing.after;
+            for child in listing.children {
+                guard!(let Type::Link(link) = child else {
+                    return Err(RedditError::UnexpectedResponse)
+                });
+                posts.push(link);
             }
+            left = left.checked_sub(25).unwrap_or(0);
         }
         Ok(posts)
     }
