@@ -28,7 +28,7 @@ async fn handle_update(database: db::DbPool, api: Api, update: Update) -> Result
     }
     let link = database.get().await?.fetch_random_link()?;
     info!(
-        "Sending file {}: {}\n\tUser: {:?}\n\tChat: {:?}",
+        "Sending image\n\t{}: {}\n\tUser: {:?}\n\tChat: {:?}",
         link.title, link.link, message.from.username, message.chat
     );
     let response = api
