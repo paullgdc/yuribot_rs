@@ -1,24 +1,22 @@
-#[macro_use]
-extern crate diesel;
-
-#[macro_use]
-extern crate log;
-
 mod bot;
 mod db;
+mod errors;
 mod parse_args;
 mod reddit_api;
 mod scrapper;
+
 use std::time::Duration;
-mod errors;
+
+#[macro_use]
+extern crate diesel;
+#[macro_use]
+extern crate log;
+use env_logger;
+use futures::{pin_mut, select, FutureExt};
+use serde_derive::Deserialize;
+use toml;
 
 use errors::YuribotError;
-
-use futures::FutureExt;
-use env_logger;
-use toml;
-use serde_derive::Deserialize;
-use futures::{select, pin_mut};
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -46,7 +44,12 @@ async fn main() -> Result<(), YuribotError> {
         },
         16,
     );
-    let db_pool = deadpool::Pool::new(db::DatabaseManager{path: conf.database_path.clone()}, 4);
+    let db_pool = deadpool::Pool::new(
+        db::DatabaseManager {
+            path: conf.database_path.clone(),
+        },
+        4,
+    );
     let bot_api = telegram_bot::Api::new(&conf.bot_token);
 
     use parse_args::Action::*;
@@ -56,10 +59,10 @@ async fn main() -> Result<(), YuribotError> {
             let scrapper_task = scrapper::run_scrapper(db_pool.clone(), rd_pool).fuse();
             pin_mut!(bot_task, scrapper_task);
             select!(
-            _ = bot_task => (),
-            _ = scrapper_task => (),
-        )
-        },
+                _ = bot_task => (),
+                _ = scrapper_task => (),
+            )
+        }
         SeedDatabase { limit } => scrapper::seed_database(limit, rd_pool, db_pool).await?,
         Help(usage) => println!("{}", usage),
     };

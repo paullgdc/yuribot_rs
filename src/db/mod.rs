@@ -1,11 +1,10 @@
 pub mod errors;
 pub mod model;
 mod schema;
-mod tests;
 
-use diesel::prelude::*;
-use errors::{Result, DatabaseError};
 use async_trait::async_trait;
+use diesel::prelude::*;
+use errors::{DatabaseError, Result};
 
 pub struct Database {
     connection: SqliteConnection,

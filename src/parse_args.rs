@@ -1,6 +1,7 @@
+use getopts;
 
 pub enum Action {
-    SeedDatabase { limit: usize},
+    SeedDatabase { limit: usize },
     RunBot,
     Help(String),
 }
@@ -29,7 +30,7 @@ pub fn parse_args(args: Vec<String>) -> Action {
     }
     if matches.opt_present("seed") {
         return match matches.opt_get_default::<usize>("seed", 200_usize) {
-            Ok(i) => SeedDatabase{limit: i},
+            Ok(i) => SeedDatabase { limit: i },
             Err(_) => Help(opts.usage("failed to parse --seed argument to integer")),
         };
     }

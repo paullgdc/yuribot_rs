@@ -9,11 +9,11 @@ use errors::Result;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use deadpool;
 use guard::guard;
 use hyper::{client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri};
 use hyper_tls::HttpsConnector;
 use tokio::timer::Timeout;
-use deadpool;
 
 #[derive(Debug)]
 struct Inner {
@@ -89,7 +89,6 @@ impl Reddit {
         max_time: MaxTime,
         limit: usize,
     ) -> Result<Vec<Link>> {
-        let reddit = self.clone();
         let mut posts = Vec::with_capacity(limit);
         let mut after = String::new();
         let mut left = limit;
@@ -133,7 +132,8 @@ impl Reddit {
 }
 
 pub struct RedditManager {
-    pub user_agent: String, pub timeout: Duration
+    pub user_agent: String,
+    pub timeout: Duration,
 }
 
 #[async_trait]

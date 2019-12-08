@@ -66,5 +66,6 @@ YURIBOT_LOG=yuribot_rs=info cargo run --release
 
 You can tune the log verbosity of the bot with the env variable `YURIBOT_LOG`
 ex :
+
 * only info,  warning and errors: `YURIBOT_LOG=yuribot_rs=info`
 * debug informations : `YURIBOT_LOG=yuribot_rs=debug`

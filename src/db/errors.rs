@@ -1,5 +1,5 @@
-use thiserror::Error;
 use diesel;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum DatabaseError {

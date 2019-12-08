@@ -12,7 +12,7 @@ pub enum RedditError {
     #[error("error while parsing response from reddit api call")]
     ParsingError,
     #[error("reddit api returned a {error_code} code")]
-    ApiError {error_code : u16 },
+    ApiError { error_code: u16 },
     #[error("received unexpected result from reddit api call")]
     UnexpectedResponse,
 }

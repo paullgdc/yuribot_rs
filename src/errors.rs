@@ -1,6 +1,7 @@
-use thiserror::Error;
-use crate::reddit_api;
 use crate::db;
+use crate::reddit_api;
+
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum YuribotError {

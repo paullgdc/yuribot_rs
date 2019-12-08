@@ -1,7 +1,9 @@
 use crate::db;
 use crate::reddit_api;
 use crate::YuribotError;
+
 use std::time::Duration;
+
 use tokio::timer::Interval;
 
 fn is_image_url(url: &str) -> bool {
@@ -36,7 +38,10 @@ async fn pull_links(
 
 pub async fn run_scrapper(db_pool: db::DbPool, rd_pool: reddit_api::RdPool) {
     let database = db_pool.get().await.expect("can't get database connection");
-    let reddit = rd_pool.get().await.expect("can't get reddit api connection");
+    let reddit = rd_pool
+        .get()
+        .await
+        .expect("can't get reddit api connection");
     let mut intervall = Interval::new_interval(Duration::from_secs(30 * 60));
     while let Some(_) = intervall.next().await {
         if let Err(e) = pull_links(&database, &reddit, 3, reddit_api::MaxTime::DAY).await {
@@ -55,4 +60,3 @@ pub async fn seed_database(
     pull_links(&database, &reddit, nb_posts, reddit_api::MaxTime::ALL).await?;
     Ok(())
 }
-
