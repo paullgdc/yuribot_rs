@@ -23,7 +23,7 @@ async fn pull_links(
             link_number,
         )
         .await?;
-    database.insert_links(
+    let insert_count = database.insert_links(
         &links
             .iter()
             .filter(|link| is_image_url(&link.url))
@@ -33,6 +33,7 @@ async fn pull_links(
             })
             .collect::<Vec<db::model::NewLink>>(),
     )?;
+    info!("inserted {} new links in database", insert_count);
     Ok(())
 }
 
