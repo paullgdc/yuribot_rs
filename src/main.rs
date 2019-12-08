@@ -13,7 +13,7 @@ extern crate diesel;
 extern crate log;
 use env_logger;
 use futures::{pin_mut, select, FutureExt};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use toml;
 
 use errors::{YuribotError, Result};
