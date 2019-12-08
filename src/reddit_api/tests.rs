@@ -74,18 +74,4 @@ mod tests {
             .collect::<Result<Vec<()>, RedditError>>();
         assert!(res.is_ok());
     }
-
-    #[tokio::test]
-    async fn test_timeout() {
-        let reddit = Reddit::new(
-            "rustTest/0.1".into(),
-            Duration::from_millis(1),
-        )
-        .unwrap();
-        if let RedditError::Timeout = reddit.is_connected().await.unwrap_err() {
-
-        } else {
-            panic!("should have timed out");
-        }
-    }
 }
