@@ -4,18 +4,17 @@ mod schema;
 mod tests;
 
 use diesel::prelude::*;
-use errors::Result;
-use std::rc::Rc;
+use errors::{Result, DatabaseError};
+use async_trait::async_trait;
 
-#[derive(Clone)]
 pub struct Database {
-    connection: Rc<SqliteConnection>,
+    connection: SqliteConnection,
 }
 
 impl Database {
     pub fn new(path: &str) -> Result<Self> {
         Ok(Database {
-            connection: Rc::new(SqliteConnection::establish(path)?),
+            connection: SqliteConnection::establish(path)?,
         })
     }
 
@@ -24,14 +23,14 @@ impl Database {
         let new_link = model::NewLink { link, title };
         diesel::insert_or_ignore_into(schema::links::table)
             .values(new_link)
-            .execute(&*self.connection)
+            .execute(&self.connection)
             .map_err(|e| e.into())
     }
 
     pub fn insert_links<'a>(&self, new_links: &[model::NewLink<'a>]) -> Result<usize> {
         diesel::insert_or_ignore_into(schema::links::table)
             .values(new_links)
-            .execute(&*self.connection)
+            .execute(&self.connection)
             .map_err(|e| e.into())
     }
 
@@ -41,7 +40,24 @@ impl Database {
         links
             .order(RANDOM)
             .limit(1)
-            .first(&*self.connection)
+            .first(&self.connection)
             .map_err(|e| e.into())
     }
 }
+
+pub struct DatabaseManager {
+    pub path: String,
+}
+
+#[async_trait]
+impl deadpool::Manager<Database, DatabaseError> for DatabaseManager {
+    async fn create(&self) -> Result<Database> {
+        Database::new(&self.path)
+    }
+
+    async fn recycle(&self, db: Database) -> Result<Database> {
+        Ok(db)
+    }
+}
+
+pub type DbPool = deadpool::Pool<Database, DatabaseError>;

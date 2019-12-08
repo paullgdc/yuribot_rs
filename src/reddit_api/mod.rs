@@ -1,16 +1,19 @@
 mod errors;
 mod tests;
+mod types;
+
 pub use errors::RedditError;
+pub use types::*;
 use errors::Result;
 
-use std::rc::*;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use guard::guard;
 use hyper::{client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri};
 use hyper_tls::HttpsConnector;
-use serde_derive::Deserialize;
 use tokio::timer::Timeout;
+use deadpool;
 
 #[derive(Debug)]
 struct Inner {
@@ -19,9 +22,9 @@ struct Inner {
     timeout: Duration,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Reddit {
-    inner: Rc<Inner>,
+    inner: Inner,
 }
 
 impl Reddit {
@@ -30,11 +33,11 @@ impl Reddit {
             .map_err(|_| RedditError::NetworkError)
             .map(|https| Client::builder().build(https))?;
         Ok(Reddit {
-            inner: Rc::new(Inner {
+            inner: Inner {
                 user_agent,
                 client,
                 timeout,
-            }),
+            },
         })
     }
 
@@ -65,7 +68,7 @@ impl Reddit {
         }
         Timeout::new(
             async {
-                let body = response.into_body();
+                let mut body = response.into_body();
                 let mut bytes = Vec::new();
                 while let Some(next) = body.next().await {
                     let chunk = next.map_err(|_| RedditError::NetworkError)?;
@@ -113,7 +116,10 @@ impl Reddit {
             guard!(let Type::Listing(listing) = response else {
                 return Err(RedditError::UnexpectedResponse)
             });
-            let after = listing.after;
+            after = match listing.after {
+                Some(after) => after,
+                None => break,
+            };
             for child in listing.children {
                 guard!(let Type::Link(link) = child else {
                     return Err(RedditError::UnexpectedResponse)
@@ -126,62 +132,20 @@ impl Reddit {
     }
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(tag = "kind", content = "data")]
-pub enum Type {
-    #[serde(rename = "t3")]
-    Link(Link),
-    Listing(Listing),
+pub struct RedditManager {
+    pub user_agent: String, pub timeout: Duration
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Listing {
-    children: Vec<Type>,
-    after: Option<String>,
-    before: Option<String>,
-}
+#[async_trait]
+impl deadpool::Manager<Reddit, RedditError> for RedditManager {
+    async fn create(&self) -> Result<Reddit> {
+        Reddit::new(self.user_agent.clone(), self.timeout)
+    }
 
-#[derive(Deserialize, Debug)]
-pub struct Link {
-    pub subreddit: String,
-    pub title: String,
-    pub name: String,
-    pub over_18: bool,
-    pub pinned: bool,
-    pub url: String,
-    pub spoiler: bool,
-    pub selftext: String,
-    pub score: i64,
-}
-
-#[derive(Debug)]
-pub struct Sort(&'static str);
-
-#[allow(dead_code)]
-impl Sort {
-    pub const NEW: Sort = Sort("/new");
-    pub const BEST: Sort = Sort("/best");
-    pub const TOP: Sort = Sort("/top");
-    pub const CONTROVERSIAL: Sort = Sort("/controversial");
-    pub const HOT: Sort = Sort("/hot");
-
-    fn as_str(&self) -> &'static str {
-        self.0
+    async fn recycle(&self, reddit: Reddit) -> Result<Reddit> {
+        reddit.is_connected().await?;
+        Ok(reddit)
     }
 }
 
-#[derive(Debug)]
-pub struct MaxTime(&'static str);
-
-#[allow(dead_code)]
-impl MaxTime {
-    pub const ALL: MaxTime = MaxTime("all");
-    pub const YEAR: MaxTime = MaxTime("year");
-    pub const MONTH: MaxTime = MaxTime("month");
-    pub const WEEK: MaxTime = MaxTime("week");
-    pub const DAY: MaxTime = MaxTime("day");
-
-    fn as_str(&self) -> &'static str {
-        self.0
-    }
-}
+pub type RdPool = deadpool::Pool<Reddit, RedditError>;
