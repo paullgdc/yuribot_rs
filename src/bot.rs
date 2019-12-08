@@ -1,4 +1,6 @@
 use crate::db;
+use crate::Result;
+
 use futures::StreamExt;
 use guard::guard;
 use telegram_bot::{
@@ -7,33 +9,21 @@ use telegram_bot::{
     Api,
 };
 
-async fn handle_update(database: db::DbPool, api: Api, update: Update) {
-    guard!(let UpdateKind::Message(message) = update.kind else { return });
-    guard!(let MessageKind::Text {ref data, ..} = message.kind else { return });
+async fn handle_update(database: db::DbPool, api: Api, update: Update) -> Result<()> {
+    guard!(let UpdateKind::Message(message) = update.kind else { return Ok(()) });
+    guard!(let MessageKind::Text {ref data, ..} = message.kind else { return Ok(())});
     if !data.starts_with("/more") {
-        return;
+        return Ok(());
     }
-    let link = database
-        .get()
-        .await
-        .expect("Couldn't get database from pool")
-        .fetch_random_link();
-    let link = match link {
-        Ok(link) => link,
-        Err(e) => {
-            error!("{}", e);
-            return;
-        }
-    };
+    let link = database.get().await?.fetch_random_link()?;
     api.send(
         message
             .chat
             .photo(InputFileRef::new(link.link))
             .caption(link.title),
     )
-    .await
-    .err()
-    .map(|e| error!("error while responding tom message: {}", e));
+    .await?;
+    Ok(())
 }
 
 pub async fn start_bot(db_pool: db::DbPool, api: Api) {
@@ -47,6 +37,15 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
                 continue;
             }
         };
-        tokio::spawn(handle_update(db_pool.clone(), api.clone(), update));
+        tokio::spawn({
+            let db_pool = db_pool.clone();
+            let api = api.clone();
+            async move {
+                let result = handle_update(db_pool, api, update).await;
+                if let Err(e) = result {
+                    error!("{}", e);
+                }
+            }
+        });
     }
 }

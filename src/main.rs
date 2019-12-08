@@ -16,7 +16,7 @@ use futures::{pin_mut, select, FutureExt};
 use serde_derive::Deserialize;
 use toml;
 
-use errors::YuribotError;
+use errors::{YuribotError, Result};
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -26,13 +26,13 @@ struct Config {
     send_photo_command: String,
 }
 
-fn read_config_file(path: &str) -> Result<Config, YuribotError> {
+fn read_config_file(path: &str) -> Result<Config> {
     let bytes = std::fs::read(path)?;
     Ok(toml::from_slice(&bytes)?)
 }
 
 #[tokio::main]
-async fn main() -> Result<(), YuribotError> {
+async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     env_logger::Builder::from_env("YURIBOT_LOG").init();
