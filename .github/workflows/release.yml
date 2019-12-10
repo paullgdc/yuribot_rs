@@ -1,7 +1,6 @@
 on:
   push:
-    branch:
-      - 'release/v*'
+    branches: ["release/v*"]
 
 name: Create Release
 
