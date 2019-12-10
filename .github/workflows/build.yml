@@ -1,0 +1,25 @@
+name: build
+
+on: [push]
+
+jobs:
+  # build_linux_x86:
+  #   
+  build_linux_arm7:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: armv7-unknown-linux-gnueabihf
+          override: true
+    - uses: actions-rs/cargo@v1
+            with:
+              use-cross: true
+              command: build
+              args: --target armv7-unknown-linux-gnueabihf
+    - uses: actions/upload-artifact@v1
+      with:
+        name: armv7_build
+        path: target/armv7-unknown-linux-gnueabihf/debug/yuribot_rs
