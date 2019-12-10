@@ -11,12 +11,16 @@ use std::time::Duration;
 extern crate diesel;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate diesel_migrations;
 use env_logger;
 use futures::{pin_mut, select, FutureExt};
 use serde::Deserialize;
 use toml;
 
 use errors::{YuribotError, Result};
+
+embed_migrations!("./migrations");
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -31,8 +35,7 @@ fn read_config_file(path: &str) -> Result<Config> {
     Ok(toml::from_slice(&bytes)?)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn inner_main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     env_logger::Builder::from_env("YURIBOT_LOG").init();
@@ -52,6 +55,9 @@ async fn main() -> Result<()> {
     );
     let bot_api = telegram_bot::Api::new(&conf.bot_token);
 
+    info!("running migrations");
+    embedded_migrations::run(&db_pool.get().await?.connection)?;
+
     use parse_args::Action::*;
     match parse_args::parse_args(args) {
         RunBot => {
@@ -68,4 +74,11 @@ async fn main() -> Result<()> {
     };
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(e) = inner_main().await {
+        error!("Fatal: {}", e);
+    }
 }

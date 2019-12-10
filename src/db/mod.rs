@@ -7,7 +7,7 @@ use diesel::prelude::*;
 use errors::{DatabaseError, Result};
 
 pub struct Database {
-    connection: SqliteConnection,
+    pub connection: SqliteConnection,
 }
 
 impl Database {

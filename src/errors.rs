@@ -15,6 +15,8 @@ pub enum YuribotError {
     TelegramSendError(#[from] telegram_bot::Error),
     #[error("error with reddit api: {0}")]
     RedditError(#[from] reddit_api::RedditError),
+    #[error("migration error: {0}")]
+    MigartionError(#[from] diesel_migrations::RunMigrationsError),
 }
 
 pub type Result<T> = std::result::Result<T, YuribotError>;
