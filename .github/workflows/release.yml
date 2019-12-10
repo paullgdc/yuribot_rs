@@ -1,7 +1,7 @@
 on:
   push:
-    tags:
-      - 'v*'
+    branch:
+      - 'release/v*'
 
 name: Create Release
 
@@ -41,6 +41,8 @@ jobs:
           use-cross: true
           command: build
           args: --target armv7-unknown-linux-gnueabihf --release
+      - name: Compress binary
+        run: zip ./yuribot_rs.zip ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
@@ -58,6 +60,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
+          asset_path: ./yuribot_rs.zip
           asset_name: yuribot_rs_armv7
           asset_content_type: application/zip
