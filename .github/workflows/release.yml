@@ -60,5 +60,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./yuribot_rs.zip
-          asset_name: yuribot_rs_armv7
+          asset_name: yuribot_rs_armv7.zip
           asset_content_type: application/zip
