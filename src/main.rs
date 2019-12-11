@@ -4,6 +4,7 @@ mod errors;
 mod parse_args;
 mod reddit_api;
 mod scrapper;
+mod utils;
 
 use std::time::Duration;
 
