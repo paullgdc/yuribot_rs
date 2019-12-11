@@ -21,6 +21,8 @@ use toml;
 
 use errors::{YuribotError, Result};
 
+pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 embed_migrations!("./migrations");
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +42,8 @@ async fn inner_main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     env_logger::Builder::from_env("YURIBOT_LOG").init();
+    debug!("version {}", VERSION);
+
     let conf: Config = read_config_file("Yuribot.toml")?;
     let rd_pool = deadpool::Pool::new(
         reddit_api::RedditManager {
