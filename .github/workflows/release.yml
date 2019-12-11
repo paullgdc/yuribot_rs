@@ -41,7 +41,7 @@ jobs:
           command: build
           args: --target armv7-unknown-linux-gnueabihf --release
       - name: Compress binary
-        run: zip ./yuribot_rs.zip ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
+        run: zip -jrm ./yuribot_rs.zip ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
