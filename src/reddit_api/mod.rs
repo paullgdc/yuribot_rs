@@ -10,10 +10,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use deadpool;
+use futures::StreamExt;
 use guard::guard;
 use hyper::{client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri};
 use hyper_tls::HttpsConnector;
-use tokio::timer::Timeout;
+use tokio::time;
 
 #[derive(Debug)]
 struct Inner {
@@ -28,17 +29,15 @@ pub struct Reddit {
 }
 
 impl Reddit {
-    pub fn new(user_agent: String, timeout: Duration) -> Result<Self> {
-        let client: Client<HttpsConnector<_>, Body> = HttpsConnector::new()
-            .map_err(|_| RedditError::NetworkError)
-            .map(|https| Client::builder().build(https))?;
-        Ok(Reddit {
+    pub fn new(user_agent: String, timeout: Duration) -> Self {
+        let client = Client::builder().build(HttpsConnector::new());
+        Reddit {
             inner: Inner {
                 user_agent,
                 client,
                 timeout,
             },
-        })
+        }
     }
 
     pub async fn is_connected(&self) -> Result<()> {
@@ -66,7 +65,8 @@ impl Reddit {
                 error_code: response.status().as_u16(),
             });
         }
-        Timeout::new(
+        time::timeout(
+            self.inner.timeout,
             async {
                 let mut body = response.into_body();
                 let mut bytes = Vec::new();
@@ -76,7 +76,6 @@ impl Reddit {
                 }
                 Ok(bytes)
             },
-            self.inner.timeout,
         )
         .await
         .map_err(|_| RedditError::Timeout)?
@@ -139,7 +138,7 @@ pub struct RedditManager {
 #[async_trait]
 impl deadpool::Manager<Reddit, RedditError> for RedditManager {
     async fn create(&self) -> Result<Reddit> {
-        Reddit::new(self.user_agent.clone(), self.timeout)
+       Ok(Reddit::new(self.user_agent.clone(), self.timeout))
     }
 
     async fn recycle(&self, reddit: Reddit) -> Result<Reddit> {

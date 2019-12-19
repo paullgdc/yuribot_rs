@@ -12,13 +12,13 @@ mod tests {
     }
     #[tokio::test]
     async fn test_reddit_is_connected() {
-        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10)).unwrap();
+        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10));
         assert!(reddit.is_connected().await.is_ok())
     }
 
     #[tokio::test]
     async fn test_subreddit_call() {
-        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10)).unwrap();
+        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10));
         let links = reddit
             .subreddit_posts("wholesomeyuri".into(), Sort::TOP, MaxTime::ALL, 10)
             .await
@@ -33,7 +33,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_max_time() {
-        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10)).unwrap();
+        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10));
         let link_all = reddit
             .subreddit_posts("wholesomeyuri".into(), Sort::TOP, MaxTime::ALL, 1)
             .await;
@@ -59,7 +59,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_concurrent_query() {
         use futures::future::join_all;
-        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10)).unwrap();
+        let reddit = Reddit::new("rustTest/0.1".into(), Duration::from_secs(10));
         let res = join_all((0..100).map(|_| reddit.is_connected()))
             .await
             .into_iter()
