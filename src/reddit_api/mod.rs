@@ -3,8 +3,8 @@ mod tests;
 mod types;
 
 pub use errors::RedditError;
-pub use types::*;
 use errors::Result;
+pub use types::*;
 
 use std::time::Duration;
 
@@ -65,18 +65,15 @@ impl Reddit {
                 error_code: response.status().as_u16(),
             });
         }
-        time::timeout(
-            self.inner.timeout,
-            async {
-                let mut body = response.into_body();
-                let mut bytes = Vec::new();
-                while let Some(next) = body.next().await {
-                    let chunk = next.map_err(|_| RedditError::NetworkError)?;
-                    bytes.extend(chunk);
-                }
-                Ok(bytes)
-            },
-        )
+        time::timeout(self.inner.timeout, async {
+            let mut body = response.into_body();
+            let mut bytes = Vec::new();
+            while let Some(next) = body.next().await {
+                let chunk = next.map_err(|_| RedditError::NetworkError)?;
+                bytes.extend(chunk);
+            }
+            Ok(bytes)
+        })
         .await
         .map_err(|_| RedditError::Timeout)?
     }
@@ -138,7 +135,7 @@ pub struct RedditManager {
 #[async_trait]
 impl deadpool::Manager<Reddit, RedditError> for RedditManager {
     async fn create(&self) -> Result<Reddit> {
-       Ok(Reddit::new(self.user_agent.clone(), self.timeout))
+        Ok(Reddit::new(self.user_agent.clone(), self.timeout))
     }
 
     async fn recycle(&self, reddit: Reddit) -> Result<Reddit> {

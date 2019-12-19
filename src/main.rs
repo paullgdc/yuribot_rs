@@ -19,7 +19,7 @@ use futures::{pin_mut, select, FutureExt};
 use serde::Deserialize;
 use toml;
 
-use errors::{YuribotError, Result};
+use errors::{Result, YuribotError};
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
