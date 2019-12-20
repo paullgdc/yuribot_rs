@@ -17,7 +17,6 @@ extern crate diesel_migrations;
 use env_logger;
 use futures::{pin_mut, select, FutureExt};
 use serde::Deserialize;
-use toml;
 
 use errors::{Result, YuribotError};
 
@@ -31,20 +30,33 @@ struct Config {
     bot_token: String,
     reddit_user_agent: String,
     send_photo_command: String,
+    log: String,
 }
 
-fn read_config_file(path: &str) -> Result<Config> {
-    let bytes = std::fs::read(path)?;
-    Ok(toml::from_slice(&bytes)?)
+fn read_config(path: &str) -> Result<Config> {
+    
+    let settings = (|| -> std::result::Result<config::Config, config::ConfigError> {
+        let mut settings = config::Config::new();
+        settings
+            .set_default("database_path", "yuribot_rs.sqlite3")?
+            .set_default("send_photo_command", "/pic")?
+            .set_default("log", "yuribot_rs=warning")?
+            .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))
+            .expect("default config values")
+            .merge(config::File::with_name(path).required(false))?
+            .merge(config::Environment::with_prefix("YURIBOT"))?;
+        Ok(settings)
+    })().expect("couldn't build config");
+    Ok(settings.try_into()?)
 }
 
 async fn inner_main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
-    env_logger::Builder::from_env("YURIBOT_LOG").init();
+    let conf: Config = read_config("Yuribot")?;
+    env_logger::Builder::new().parse_filters(&conf.log).init();
     debug!("version {}", VERSION);
 
-    let conf: Config = read_config_file("Yuribot.toml")?;
     let rd_pool = deadpool::Pool::new(
         reddit_api::RedditManager {
             user_agent: conf.reddit_user_agent.clone(),
