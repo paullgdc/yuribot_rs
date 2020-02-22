@@ -25,7 +25,7 @@ pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 embed_migrations!("./migrations");
 
 #[derive(Debug, Deserialize)]
-struct Config {
+pub struct Config {
     database_path: String,
     bot_token: String,
     reddit_user_agent: String,
@@ -40,7 +40,7 @@ fn read_config(path: &str) -> Result<Config> {
         settings
             .set_default("database_path", "yuribot_rs.sqlite3")?
             .set_default("send_photo_command", "/pic")?
-            .set_default("log", "yuribot_rs=warning")?
+            .set_default("log", "yuribot_rs=info")?
             .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))
             .expect("default config values")
             .merge(config::File::with_name(path).required(false))?
@@ -78,7 +78,7 @@ async fn inner_main() -> Result<()> {
     use parse_args::Action::*;
     match parse_args::parse_args(args) {
         RunBot => {
-            let bot_task = bot::start_bot(db_pool.clone(), bot_api).fuse();
+            let bot_task = bot::start_bot(db_pool.clone(), bot_api, conf).fuse();
             let scrapper_task = scrapper::run_scrapper(db_pool.clone(), rd_pool).fuse();
             pin_mut!(bot_task, scrapper_task);
             select!(

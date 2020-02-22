@@ -1,6 +1,7 @@
 use crate::db;
 use crate::utils::utf8_pos_from_utf16;
 use crate::Result;
+use crate::Config;
 
 use std::convert::TryInto;
 use std::time::Duration;
@@ -65,7 +66,7 @@ fn extract_command<'a>(botname: &str, message: &'a Message) -> Option<(&'a str, 
     return None;
 }
 
-pub async fn start_bot(db_pool: db::DbPool, api: Api) {
+pub async fn start_bot(db_pool: db::DbPool, api: Api, conf: Config) {
     info!("started the bot");
     let mut stream = api.stream();
     let botname = match api.send_timeout(GetMe, Duration::from_secs(5)).await {
@@ -97,7 +98,7 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
         guard!(let Some((command, includes_botname)) = extract_command(&botname, &message) else { continue });
         debug!("extracted command: {:?}", command);
         match command {
-            "/more" => {
+            com if com == conf.send_photo_command => {
                 tokio::spawn({
                     let db_pool = db_pool.clone();
                     let api = api.clone();
