@@ -31,7 +31,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          target: armv7-unknown-linux-musleabihf
+          target: armv7-unknown-linux-gnueabihf
           profile: minimal
           override: true
       - name: build binary
@@ -39,9 +39,9 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --target armv7-unknown-linux-musleabihf --release
+          args: --target armv7-unknown-linux-gnueabihf --release
       - name: Compress binary
-        run: zip -jrm ./yuribot_rs.zip ./target/armv7-unknown-linux-musleabihf/release/yuribot_rs
+        run: zip -jrm ./yuribot_rs.zip ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1.0.0
