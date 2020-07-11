@@ -27,14 +27,13 @@ embed_migrations!("./migrations");
 #[derive(Debug, Deserialize)]
 pub struct Config {
     database_path: String,
-    bot_token: String,
+    bot_token: Option<String>,
     reddit_user_agent: String,
     send_photo_command: String,
     log: String,
 }
 
 fn read_config(path: &str) -> Result<Config> {
-    
     let settings = (|| -> std::result::Result<config::Config, config::ConfigError> {
         let mut settings = config::Config::new();
         settings
@@ -46,7 +45,8 @@ fn read_config(path: &str) -> Result<Config> {
             .merge(config::File::with_name(path).required(false))?
             .merge(config::Environment::with_prefix("YURIBOT"))?;
         Ok(settings)
-    })().expect("couldn't build config");
+    })()
+    .expect("couldn't build config");
     Ok(settings.try_into()?)
 }
 
@@ -56,6 +56,12 @@ async fn inner_main() -> Result<()> {
     let conf: Config = read_config("Yuribot")?;
     env_logger::Builder::new().parse_filters(&conf.log).init();
     debug!("version {}", VERSION);
+
+    let action = parse_args::parse_args(args);
+    if let Help(usage) = action {
+        println!("{}", usage);
+        return Ok(());
+    }
 
     let rd_pool = deadpool::Pool::new(
         reddit_api::RedditManager {
@@ -70,14 +76,17 @@ async fn inner_main() -> Result<()> {
         },
         4,
     );
-    let bot_api = telegram_bot::Api::new(&conf.bot_token);
-
     info!("running migrations");
     embedded_migrations::run(&db_pool.get().await?.connection)?;
 
     use parse_args::Action::*;
-    match parse_args::parse_args(args) {
+    match action {
         RunBot => {
+            let bot_api = telegram_bot::Api::new(
+                conf.bot_token
+                    .as_ref()
+                    .ok_or(YuribotError::NoTelegramTokenError)?,
+            );
             let bot_task = bot::start_bot(db_pool.clone(), bot_api, conf).fuse();
             let scrapper_task = scrapper::run_scrapper(db_pool.clone(), rd_pool).fuse();
             pin_mut!(bot_task, scrapper_task);
@@ -87,7 +96,7 @@ async fn inner_main() -> Result<()> {
             )
         }
         SeedDatabase { limit } => scrapper::seed_database(limit, rd_pool, db_pool).await?,
-        Help(usage) => println!("{}", usage),
+        Help(_) => unreachable!(),
     };
 
     Ok(())
@@ -96,6 +105,6 @@ async fn inner_main() -> Result<()> {
 #[tokio::main]
 async fn main() {
     if let Err(e) = inner_main().await {
-        error!("Fatal: {}", e);
+        eprintln!("Fatal error: {}", e);
     }
 }

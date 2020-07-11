@@ -17,6 +17,8 @@ pub enum YuribotError {
     RedditError(#[from] reddit_api::RedditError),
     #[error("migration error: {0}")]
     MigrationError(#[from] diesel_migrations::RunMigrationsError),
+    #[error("no telegram bot token has been provided. Provide one either as an env variable YURIBOT_BOT_TOKEN, or as a variable in the Yuribot.toml")]
+    NoTelegramTokenError,
 }
 
 pub type Result<T> = std::result::Result<T, YuribotError>;
