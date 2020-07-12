@@ -19,6 +19,8 @@ pub enum YuribotError {
     MigrationError(#[from] diesel_migrations::RunMigrationsError),
     #[error("no telegram bot token has been provided. Provide one either as an env variable YURIBOT_BOT_TOKEN, or as a variable in the Yuribot.toml")]
     NoTelegramTokenError,
+    #[error("Unable to parse the command passed to the bot")]
+    CommandArgParseError,
 }
 
 pub type Result<T> = std::result::Result<T, YuribotError>;

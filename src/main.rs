@@ -29,7 +29,6 @@ pub struct Config {
     database_path: String,
     bot_token: Option<String>,
     reddit_user_agent: String,
-    send_photo_command: String,
     log: String,
 }
 
@@ -38,7 +37,6 @@ fn read_config(path: &str) -> Result<Config> {
         let mut settings = config::Config::new();
         settings
             .set_default("database_path", "yuribot_rs.sqlite3")?
-            .set_default("send_photo_command", "/pic")?
             .set_default("log", "yuribot_rs=info")?
             .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))
             .expect("default config values")
@@ -87,7 +85,7 @@ async fn inner_main() -> Result<()> {
                     .as_ref()
                     .ok_or(YuribotError::NoTelegramTokenError)?,
             );
-            let bot_task = bot::start_bot(db_pool.clone(), bot_api, conf).fuse();
+            let bot_task = bot::start_bot(db_pool.clone(), bot_api).fuse();
             let scrapper_task = scrapper::run_scrapper(db_pool.clone(), rd_pool).fuse();
             pin_mut!(bot_task, scrapper_task);
             select!(

@@ -20,14 +20,13 @@ cd yuribot_rs/
 
 * fill the config file `Yuribot.toml` with your bot's token and the command you want to use to request a picture with
 
-* Or overwrite config by passing env variables prefixed with `YURIBOT_`(ex: `send_photo_command` -> `YURIBOT_SEND_PHOTO_COMMAND`)
+* Or overwrite config by passing env variables prefixed with `YURIBOT_`(ex: `bot_token` -> `YURIBOT_BOT_TOKEN`)
 ex :
 
 ```toml
 database_path = "yuribot_rs.sqlite3"
 bot_token = "626245263:AAHnIxc6IQkL26fzPiKCojW8IXeoedoEuFI"
 reddit_user_agent = "Yuribot_rs/0.1"
-send_photo_command = "/super_command_name"
 ```
 
 * then build the bot (this can take a few minutes in `release` mode)

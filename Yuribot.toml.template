@@ -1,4 +1,3 @@
 # database_path = "..."
 # bot_token = "<enter your bot token here>"
 # reddit_user_agent = "<name of your bot>/<version>"
-# send_photo_command = "/pic"

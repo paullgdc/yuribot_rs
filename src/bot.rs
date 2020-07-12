@@ -1,7 +1,6 @@
 use crate::db;
 use crate::utils::utf8_pos_from_utf16;
 use crate::Result;
-use crate::Config;
 
 use std::convert::TryInto;
 use std::time::Duration;
@@ -16,8 +15,77 @@ use telegram_bot::{
     Api,
 };
 
-async fn handle_send_image(database: db::DbPool, api: Api, message: Message) -> Result<()> {
-    let link = database.get().await?.fetch_random_link()?;
+trait IndexMessageContent {
+    fn get_content(&self, range: ArgRange) -> Option<&str>;
+}
+
+impl IndexMessageContent for Message {
+    fn get_content(&self, range: ArgRange) -> Option<&str> {
+        guard!(let MessageKind::Text {ref data, ref entities} = self.kind else { return None });
+        data.get(range)
+    }
+}
+
+type ArgRange = std::ops::Range<usize>;
+
+#[derive(Debug)]
+enum Command {
+    More { arg: ArgRange },
+    Unrecognized,
+}
+
+impl Command {
+    fn from_message(botname: &str, message: &Message) -> Option<(Self, bool)> {
+        guard!(let MessageKind::Text {ref data, ref entities} = message.kind else { return None });
+        let entity = entities.get(0)?;
+        guard!(let MessageEntityKind::BotCommand = entity.kind else { return None });
+        if entity.offset != 0 {
+            return None;
+        }
+        let length = utf8_pos_from_utf16(data, entity.length.try_into().ok()?)?;
+        let (command, is_directed) = if data[..length].ends_with(botname) {
+            (&data[..(length - botname.len())], true)
+        } else {
+            (&data[..length], false)
+        };
+
+        let command = match command {
+            "/more" => Command::More {
+                arg: (length..data.len()),
+            },
+            _ => Command::Unrecognized,
+        };
+        Some((command, is_directed))
+    }
+}
+
+async fn handle_send_image(
+    database: db::DbPool,
+    api: Api,
+    message: Message,
+    arg_range: ArgRange,
+) -> Result<()> {
+    let arg = message
+        .get_content(arg_range)
+        .ok_or(crate::YuribotError::CommandArgParseError)?
+        .trim();
+    let link = if arg == "" {
+        Some(database.get().await?.fetch_random_link()?)
+    } else {
+        database.get().await?.search_random_full_text(arg)?
+    };
+
+    let link = match link {
+        Some(l) => l,
+        None => {
+            api.send_timeout(
+                message.text_reply("There is no image in the database for this. Sorry :("),
+                Duration::from_secs(5),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
     info!(
         "Sending image\n\t{}: {}\n\tUser: {:?}\n\tChat: {:?}",
         link.title, link.link, message.from.username, message.chat
@@ -47,26 +115,7 @@ async fn handle_unrecognized(is_directed_to_bot: bool, api: Api, message: Messag
     Ok(())
 }
 
-fn extract_command<'a>(botname: &str, message: &'a Message) -> Option<(&'a str, bool)> {
-    guard!(let MessageKind::Text {ref data, ref entities} = message.kind else { return None });
-    for entity in entities {
-        debug!("got entity {:?}", entity);
-        guard!(let MessageEntityKind::BotCommand = entity.kind else { continue });
-        let offset = utf8_pos_from_utf16(data, entity.offset.try_into().ok()?)?;
-        let data = &data[offset..];
-        let length = utf8_pos_from_utf16(data, entity.length.try_into().ok()?)?;
-        let data = &data[..length];
-        let command = if data.ends_with(botname) {
-            (&data[..(data.len() - botname.len())], true)
-        } else {
-            (data, false)
-        };
-        return Some(command);
-    }
-    return None;
-}
-
-pub async fn start_bot(db_pool: db::DbPool, api: Api, conf: Config) {
+pub async fn start_bot(db_pool: db::DbPool, api: Api) {
     info!("started the bot");
     let mut stream = api.stream();
     let botname = match api.send_timeout(GetMe, Duration::from_secs(5)).await {
@@ -95,15 +144,15 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api, conf: Config) {
         };
         debug!("received update: {:?}", update);
         guard!(let UpdateKind::Message(message) = update.kind else { continue });
-        guard!(let Some((command, includes_botname)) = extract_command(&botname, &message) else { continue });
+        guard!(let Some((command, includes_botname)) = Command::from_message(&botname, &message) else { continue });
+
         debug!("extracted command: {:?}", command);
         match command {
-            com if com == conf.send_photo_command => {
+            Command::More { arg } => {
                 tokio::spawn({
-                    let db_pool = db_pool.clone();
-                    let api = api.clone();
-                    async move {
-                        let result = handle_send_image(db_pool, api, message).await;
+                    let resp = handle_send_image(db_pool.clone(), api.clone(), message, arg);
+                    async {
+                        let result = resp.await;
                         if let Err(e) = result {
                             error!("handling update error: {}", e);
                         }

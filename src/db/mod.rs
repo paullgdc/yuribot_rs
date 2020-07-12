@@ -6,6 +6,22 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use errors::{DatabaseError, Result};
 
+no_arg_sql_function!(RANDOM, (), "Represents the sql RANDOM() function");
+
+fn escape_fts(search: &str) -> String {
+    let mut  escaped = String::with_capacity(search.len() + 2);
+    escaped.push('"');
+    for c in search.chars() {
+        if c == '"' {
+            escaped.push_str("\"\"");
+        } else {
+            escaped.push(c);
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
 pub struct Database {
     pub connection: SqliteConnection,
 }
@@ -35,11 +51,26 @@ impl Database {
 
     pub fn fetch_random_link(&self) -> Result<model::Link> {
         use schema::links::dsl::*;
-        no_arg_sql_function!(RANDOM, (), "Represents the sql RANDOM() function");
         links
             .order(RANDOM)
             .limit(1)
             .first(&self.connection)
+            .map_err(|e| e.into())
+    }
+
+    pub fn search_random_full_text(&self, search: &str) -> Result<Option<model::Link>> {
+        use schema::links_title_idx;
+        links_title_idx::table
+            .select((
+                links_title_idx::id,
+                links_title_idx::link,
+                links_title_idx::title,
+            ))
+            .filter(links_title_idx::whole_row.eq(escape_fts(search)))
+            .order(RANDOM)
+            .limit(1)
+            .first(&self.connection)
+            .optional()
             .map_err(|e| e.into())
     }
 }
@@ -60,3 +91,9 @@ impl deadpool::Manager<Database, DatabaseError> for DatabaseManager {
 }
 
 pub type DbPool = deadpool::Pool<Database, DatabaseError>;
+
+#[test]
+fn test_escape_fts() {
+    assert_eq!("\"test string 132\"", escape_fts("test string 132"));
+    assert_eq!("\"test \"\"string\"\" 132\"", escape_fts("test \"string\" 132"));
+}
