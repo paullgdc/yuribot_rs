@@ -1,6 +1,4 @@
-on:
-  push:
-    branches: ["release/v*"]
+on: push
 
 name: Create Release
 
@@ -27,13 +25,11 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
-      - name: Download toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: armv7-unknown-linux-gnueabihf
-          profile: minimal
-          override: true
+      - name: Build docker image
+        uses: docker/build-push-action@v1
+        push: false
+        path: cross
+        tags: cross-with-openssl
       - name: build binary
         uses: actions-rs/cargo@v1
         with:
@@ -42,23 +38,23 @@ jobs:
           args: --target armv7-unknown-linux-gnueabihf --release
       - name: Compress binary
         run: zip -jrm ./yuribot_rs.zip ./target/armv7-unknown-linux-gnueabihf/release/yuribot_rs
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset 
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./yuribot_rs.zip
-          asset_name: yuribot_rs_armv7.zip
-          asset_content_type: application/zip
+      # - name: Create Release
+      #   id: create_release
+      #   uses: actions/create-release@v1.0.0
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     tag_name: ${{ github.ref }}
+      #     release_name: Release ${{ github.ref }}
+      #     draft: false
+      #     prerelease: false
+      # - name: Upload Release Asset
+      #   id: upload-release-asset 
+      #   uses: actions/upload-release-asset@v1.0.1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #     asset_path: ./yuribot_rs.zip
+      #     asset_name: yuribot_rs_armv7.zip
+      #     asset_content_type: application/zip
