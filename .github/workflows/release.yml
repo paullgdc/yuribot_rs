@@ -27,13 +27,8 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
-      - name: Download toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: armv7-unknown-linux-gnueabihf
-          profile: minimal
-          override: true
+      - name: Build docker image
+        run: docker build -t cross-with-openssl ./cross
       - name: build binary
         uses: actions-rs/cargo@v1
         with:
