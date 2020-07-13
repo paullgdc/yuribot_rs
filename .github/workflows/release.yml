@@ -27,9 +27,10 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-registry-
       - name: Build docker image
         uses: docker/build-push-action@v1
-        push: false
-        path: cross
-        tags: cross-with-openssl
+        with:
+          push: false
+          path: cross
+          tags: cross-with-openssl
       - name: build binary
         uses: actions-rs/cargo@v1
         with:
