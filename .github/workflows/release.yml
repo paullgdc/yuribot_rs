@@ -26,11 +26,7 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
       - name: Build docker image
-        uses: docker/build-push-action@v1
-        with:
-          push: false
-          path: cross
-          tags: cross-with-openssl
+        run: docker build -t cross-with-openssl ./cross
       - name: build binary
         uses: actions-rs/cargo@v1
         with:
