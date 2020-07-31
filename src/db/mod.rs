@@ -9,7 +9,7 @@ use errors::{DatabaseError, Result};
 no_arg_sql_function!(RANDOM, (), "Represents the sql RANDOM() function");
 
 fn escape_fts(search: &str) -> String {
-    let mut  escaped = String::with_capacity(search.len() + 2);
+    let mut escaped = String::with_capacity(search.len() + 2);
     escaped.push('"');
     for c in search.chars() {
         if c == '"' {
@@ -58,6 +58,11 @@ impl Database {
             .map_err(|e| e.into())
     }
 
+    pub fn count_links(&self) -> Result<i64> {
+        use schema::links::dsl::*;
+        links.count().first(&self.connection).map_err(|e| e.into())
+    }
+
     pub fn search_random_full_text(&self, search: &str) -> Result<Option<model::Link>> {
         use schema::links_title_idx;
         links_title_idx::table
@@ -71,6 +76,15 @@ impl Database {
             .limit(1)
             .first(&self.connection)
             .optional()
+            .map_err(|e| e.into())
+    }
+
+    pub fn count_links_search(&self, search: &str) -> Result<i64> {
+        use schema::links_title_idx;
+        links_title_idx::table
+            .count()
+            .filter(links_title_idx::whole_row.eq(escape_fts(search)))
+            .first(&self.connection)
             .map_err(|e| e.into())
     }
 }
@@ -95,5 +109,8 @@ pub type DbPool = deadpool::Pool<Database, DatabaseError>;
 #[test]
 fn test_escape_fts() {
     assert_eq!("\"test string 132\"", escape_fts("test string 132"));
-    assert_eq!("\"test \"\"string\"\" 132\"", escape_fts("test \"string\" 132"));
+    assert_eq!(
+        "\"test \"\"string\"\" 132\"",
+        escape_fts("test \"string\" 132")
+    );
 }

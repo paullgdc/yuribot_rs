@@ -9,28 +9,31 @@ use futures::StreamExt;
 use guard::guard;
 use telegram_bot::{
     prelude::{CanReplySendMessage, CanSendPhoto},
-    types::{
-        GetMe, InputFileRef, Message, MessageChat, MessageEntityKind, MessageKind, UpdateKind,
-    },
+    types::{GetMe, InputFileRef, Message, MessageEntityKind, MessageKind, UpdateKind},
     Api,
 };
 
-trait IndexMessageContent {
-    fn get_content(&self, range: ArgRange) -> Option<&str>;
-}
-
-impl IndexMessageContent for Message {
-    fn get_content(&self, range: ArgRange) -> Option<&str> {
-        guard!(let MessageKind::Text {ref data, ref entities} = self.kind else { return None });
-        data.get(range)
+mod message {
+    use guard::guard;
+    use telegram_bot::types::{Message, MessageChat, MessageKind};
+    pub type ArgRange = std::ops::Range<usize>;
+    pub fn get_arg(message: &Message, range: ArgRange) -> Option<&str> {
+        guard!(let MessageKind::Text {ref data, ref entities} = message.kind else { return None });
+        Some(data[range].trim())
+    }
+    pub fn is_private(message: &Message) -> bool {
+        if let MessageChat::Private(_) = message.chat {
+            true
+        } else {
+            false
+        }
     }
 }
 
-type ArgRange = std::ops::Range<usize>;
-
 #[derive(Debug)]
 enum Command {
-    More { arg: ArgRange },
+    More { arg: message::ArgRange },
+    Count { arg: message::ArgRange },
     Unrecognized,
 }
 
@@ -53,22 +56,23 @@ impl Command {
             "/more" => Command::More {
                 arg: (length..data.len()),
             },
+            "/count" => Command::Count {
+                arg: (length..data.len()),
+            },
             _ => Command::Unrecognized,
         };
         Some((command, is_directed))
     }
 }
 
-async fn handle_send_image(
+async fn handle_more(
     database: db::DbPool,
     api: Api,
     message: Message,
-    arg_range: ArgRange,
+    arg_range: message::ArgRange,
 ) -> Result<()> {
-    let arg = message
-        .get_content(arg_range)
-        .ok_or(crate::YuribotError::CommandArgParseError)?
-        .trim();
+    let arg =
+        message::get_arg(&message, arg_range).ok_or(crate::YuribotError::CommandArgParseError)?;
     let link = if arg == "" {
         Some(database.get().await?.fetch_random_link()?)
     } else {
@@ -103,6 +107,30 @@ async fn handle_send_image(
     Ok(())
 }
 
+async fn handle_count(
+    database: db::DbPool,
+    api: Api,
+    message: Message,
+    arg_range: message::ArgRange,
+) -> Result<()> {
+    let arg =
+        message::get_arg(&message, arg_range).ok_or(crate::YuribotError::CommandArgParseError)?;
+    let link_count = if arg == "" {
+        database.get().await?.count_links()?
+    } else {
+        database.get().await?.count_links_search(arg)?
+    };
+    api.send_timeout(
+        message.text_reply(format!(
+            "There are {} links in the database for this query",
+            link_count
+        )),
+        Duration::from_secs(5),
+    )
+    .await?;
+    Ok(())
+}
+
 async fn handle_unrecognized(is_directed_to_bot: bool, api: Api, message: Message) -> Result<()> {
     if !is_directed_to_bot {
         return Ok(());
@@ -113,6 +141,18 @@ async fn handle_unrecognized(is_directed_to_bot: bool, api: Api, message: Messag
     )
     .await?;
     Ok(())
+}
+
+fn spawn_response<T, E>(fut: T)
+where
+    T: std::future::Future<Output = Result<E>> + Send + 'static,
+    E: Send,
+{
+    tokio::spawn(async {
+        if let Err(e) = fut.await {
+            error!("telegram message handling error: {}", e);
+        }
+    });
 }
 
 pub async fn start_bot(db_pool: db::DbPool, api: Api) {
@@ -149,32 +189,14 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
         debug!("extracted command: {:?}", command);
         match command {
             Command::More { arg } => {
-                tokio::spawn({
-                    let resp = handle_send_image(db_pool.clone(), api.clone(), message, arg);
-                    async {
-                        let result = resp.await;
-                        if let Err(e) = result {
-                            error!("handling update error: {}", e);
-                        }
-                    }
-                });
+                spawn_response(handle_more(db_pool.clone(), api.clone(), message, arg));
             }
-            _ => {
-                tokio::spawn({
-                    let api = api.clone();
-                    let is_directed = includes_botname
-                        || if let MessageChat::Private(_) = message.chat {
-                            true
-                        } else {
-                            false
-                        };
-                    async move {
-                        let result = handle_unrecognized(is_directed, api, message).await;
-                        if let Err(e) = result {
-                            error!("handling update error: {}", e);
-                        }
-                    }
-                });
+            Command::Count { arg } => {
+                spawn_response(handle_count(db_pool.clone(), api.clone(), message, arg));
+            }
+            Command::Unrecognized => {
+                let is_directed = includes_botname || message::is_private(&message);
+                spawn_response(handle_unrecognized(is_directed, api.clone(), message));
             }
         }
     }
