@@ -34,6 +34,7 @@ mod message {
 enum Command {
     More { arg: message::ArgRange },
     Count { arg: message::ArgRange },
+    Version,
     Unrecognized,
 }
 
@@ -59,6 +60,7 @@ impl Command {
             "/count" => Command::Count {
                 arg: (length..data.len()),
             },
+            "/version" => Command::Version,
             _ => Command::Unrecognized,
         };
         Some((command, is_directed))
@@ -143,6 +145,12 @@ async fn handle_unrecognized(is_directed_to_bot: bool, api: Api, message: Messag
     Ok(())
 }
 
+async fn handle_version(api: Api, message: Message) -> Result<()> {
+    api.send_timeout(message.text_reply(crate::VERSION), Duration::from_secs(5))
+        .await?;
+    Ok(())
+}
+
 fn spawn_response<T, E>(fut: T)
 where
     T: std::future::Future<Output = Result<E>> + Send + 'static,
@@ -197,6 +205,9 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
             Command::Unrecognized => {
                 let is_directed = includes_botname || message::is_private(&message);
                 spawn_response(handle_unrecognized(is_directed, api.clone(), message));
+            }
+            Command::Version => {
+                spawn_response(handle_version(api.clone(), message));
             }
         }
     }

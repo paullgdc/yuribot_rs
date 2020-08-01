@@ -1,6 +1,6 @@
 [package]
 name = "yuribot_rs"
-version = "0.2.7"
+version = "0.2.8"
 authors = ["Paul Le Grand Des Cloizeaux <paul.legranddec@gmail.com>"]
 edition = "2018"
 

@@ -20,7 +20,7 @@ use serde::Deserialize;
 
 use errors::{Result, YuribotError};
 
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub(crate) const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 embed_migrations!("./migrations");
 
