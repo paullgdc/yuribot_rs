@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use deadpool;
-use futures::StreamExt;
-use guard::guard;
-use hyper::{client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri};
+use hyper::{
+    body::Buf, client::HttpConnector, header::USER_AGENT, Body, Client, Method, Request, Uri,
+};
 use hyper_tls::HttpsConnector;
 use tokio::time;
 
@@ -47,7 +47,7 @@ impl Reddit {
         self.api_call(uri).await.map(|_| ())
     }
 
-    async fn api_call(&self, uri: Uri) -> Result<Vec<u8>> {
+    async fn api_call(&self, uri: Uri) -> Result<impl hyper::body::Buf> {
         let request = Request::builder()
             .method(Method::GET)
             .header(USER_AGENT, self.inner.user_agent.clone())
@@ -66,13 +66,9 @@ impl Reddit {
             });
         }
         time::timeout(self.inner.timeout, async {
-            let mut body = response.into_body();
-            let mut bytes = Vec::new();
-            while let Some(next) = body.next().await {
-                let chunk = next.map_err(|_| RedditError::NetworkError)?;
-                bytes.extend(chunk);
-            }
-            Ok(bytes)
+            hyper::body::aggregate(response.into_body())
+                .await
+                .map_err(|_| RedditError::NetworkError)
         })
         .await
         .map_err(|_| RedditError::Timeout)?
@@ -106,19 +102,21 @@ impl Reddit {
                 .build()
                 .map_err(|_| RedditError::ParsingError)?;
             let data = self.api_call(uri).await?;
-            let response =
-                serde_json::from_slice::<Type>(&data).map_err(|_| RedditError::ParsingError)?;
-            guard!(let Type::Listing(listing) = response else {
-                return Err(RedditError::UnexpectedResponse)
-            });
+            let response = serde_json::from_reader::<_, Type>(data.reader())
+                .map_err(|_| RedditError::ParsingError)?;
+            let listing = match response {
+                Type::Listing(l) => l,
+                _ => return Err(RedditError::UnexpectedResponse),
+            };
             after = match listing.after {
                 Some(after) => after,
                 None => break,
             };
             for child in listing.children {
-                guard!(let Type::Link(link) = child else {
-                    return Err(RedditError::UnexpectedResponse)
-                });
+                let link = match child {
+                    Type::Link(l) => l,
+                    _ => return Err(RedditError::UnexpectedResponse),
+                };
                 posts.push(link);
             }
             left = left.checked_sub(25).unwrap_or(0);

@@ -6,7 +6,6 @@ use std::convert::TryInto;
 use std::time::Duration;
 
 use futures::StreamExt;
-use guard::guard;
 use telegram_bot::{
     prelude::{CanReplySendMessage, CanSendPhoto},
     types::{GetMe, InputFileRef, Message, MessageEntityKind, MessageKind, UpdateKind},
@@ -14,11 +13,13 @@ use telegram_bot::{
 };
 
 mod message {
-    use guard::guard;
     use telegram_bot::types::{Message, MessageChat, MessageKind};
     pub type ArgRange = std::ops::Range<usize>;
     pub fn get_arg(message: &Message, range: ArgRange) -> Option<&str> {
-        guard!(let MessageKind::Text {ref data, ref entities} = message.kind else { return None });
+        let data = match &message.kind {
+            MessageKind::Text {ref data,  ..} => data,
+            _ => return None,
+        };
         Some(data[range].trim())
     }
     pub fn is_private(message: &Message) -> bool {
@@ -40,9 +41,15 @@ enum Command {
 
 impl Command {
     fn from_message(botname: &str, message: &Message) -> Option<(Self, bool)> {
-        guard!(let MessageKind::Text {ref data, ref entities} = message.kind else { return None });
+        let (data, entities) = match message.kind {
+            MessageKind::Text {ref data, ref entities} => (data, entities),
+            _ => return None,
+        };
         let entity = entities.get(0)?;
-        guard!(let MessageEntityKind::BotCommand = entity.kind else { return None });
+        match entity.kind {
+            MessageEntityKind::BotCommand => {},
+            _ => return None,
+        };
         if entity.offset != 0 {
             return None;
         }
@@ -191,9 +198,14 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
             }
         };
         debug!("received update: {:?}", update);
-        guard!(let UpdateKind::Message(message) = update.kind else { continue });
-        guard!(let Some((command, includes_botname)) = Command::from_message(&botname, &message) else { continue });
-
+        let message = match update.kind {
+            UpdateKind::Message(message) => message,
+            _ => continue,
+        };
+        let (command, includes_botname) = match Command::from_message(&botname, &message) {
+            Some(c) => c,
+            None => continue,
+        };
         debug!("extracted command: {:?}", command);
         match command {
             Command::More { arg } => {

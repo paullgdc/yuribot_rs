@@ -2,6 +2,7 @@ use super::schema::links;
 
 #[derive(Queryable, Debug)]
 pub struct Link {
+    #[allow(dead_code)]
     id: i32,
     pub link: String,
     pub title: String,

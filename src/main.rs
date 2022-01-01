@@ -100,7 +100,7 @@ async fn inner_main() -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     if let Err(e) = inner_main().await {
         eprintln!("Fatal error: {}", e);

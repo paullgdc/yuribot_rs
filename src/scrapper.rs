@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use tokio::time;
+use tokio_stream::wrappers::IntervalStream;
 
 fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
@@ -44,7 +45,7 @@ pub async fn run_scrapper(db_pool: db::DbPool, rd_pool: reddit_api::RdPool) {
         .get()
         .await
         .expect("can't get reddit api connection");
-    let mut interval = time::interval(Duration::from_secs(30 * 60));
+    let mut interval = IntervalStream::new(time::interval(Duration::from_secs(30 * 60)));
     while let Some(_) = interval.next().await {
         if let Err(e) = pull_links(&database, &reddit, 3, reddit_api::MaxTime::DAY).await {
             error!("{}", e);
