@@ -12,7 +12,7 @@ fn is_image_url(url: &str) -> bool {
     url.ends_with(".png") || url.ends_with(".jpg") || url.ends_with(".jpeg")
 }
 async fn pull_links(
-    database: &db::Database,
+    database: &mut db::Database,
     reddit: &reddit_api::Reddit,
     link_number: usize,
     time: reddit_api::MaxTime,
@@ -40,14 +40,14 @@ async fn pull_links(
 }
 
 pub async fn run_scrapper(db_pool: db::DbPool, rd_pool: reddit_api::RdPool) {
-    let database = db_pool.get().await.expect("can't get database connection");
+    let mut database = db_pool.get().await.expect("can't get database connection");
     let reddit = rd_pool
         .get()
         .await
         .expect("can't get reddit api connection");
     let mut interval = IntervalStream::new(time::interval(Duration::from_secs(30 * 60)));
     while let Some(_) = interval.next().await {
-        if let Err(e) = pull_links(&database, &reddit, 3, reddit_api::MaxTime::DAY).await {
+        if let Err(e) = pull_links(&mut database, &reddit, 3, reddit_api::MaxTime::DAY).await {
             error!("{}", e);
         }
     }
@@ -59,7 +59,7 @@ pub async fn seed_database(
     db_pool: db::DbPool,
 ) -> Result<(), YuribotError> {
     let reddit = rd_pool.get().await?;
-    let database = db_pool.get().await?;
-    pull_links(&database, &reddit, nb_posts, reddit_api::MaxTime::ALL).await?;
+    let mut database = db_pool.get().await?;
+    pull_links(&mut database, &reddit, nb_posts, reddit_api::MaxTime::ALL).await?;
     Ok(())
 }

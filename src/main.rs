@@ -12,8 +12,7 @@ use std::time::Duration;
 extern crate diesel;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate diesel_migrations;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use env_logger;
 use futures::{pin_mut, select, FutureExt};
 use serde::Deserialize;
@@ -22,7 +21,7 @@ use errors::{Result, YuribotError};
 
 pub(crate) const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-embed_migrations!("./migrations");
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -34,18 +33,16 @@ pub struct Config {
 
 fn read_config(path: &str) -> Result<Config> {
     let settings = (|| -> std::result::Result<config::Config, config::ConfigError> {
-        let mut settings = config::Config::new();
-        settings
+        config::Config::builder()
             .set_default("database_path", "yuribot_rs.sqlite3")?
             .set_default("log", "yuribot_rs=info")?
-            .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))
-            .expect("default config values")
-            .merge(config::File::with_name(path).required(false))?
-            .merge(config::Environment::with_prefix("YURIBOT"))?;
-        Ok(settings)
+            .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))?
+            .add_source(config::File::with_name(path).required(false))
+            .add_source(config::Environment::with_prefix("YURIBOT"))
+            .build()
     })()
     .expect("couldn't build config");
-    Ok(settings.try_into()?)
+    Ok(settings.try_deserialize()?)
 }
 
 async fn inner_main() -> Result<()> {
@@ -75,7 +72,12 @@ async fn inner_main() -> Result<()> {
         4,
     );
     info!("running migrations");
-    embedded_migrations::run(&db_pool.get().await?.connection)?;
+    db_pool
+        .get()
+        .await?
+        .connection
+        .run_pending_migrations(MIGRATIONS)
+        .map_err(YuribotError::MigrationError)?;
 
     use parse_args::Action::*;
     match action {

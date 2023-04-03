@@ -6,7 +6,10 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use errors::{DatabaseError, Result};
 
-no_arg_sql_function!(RANDOM, (), "Represents the sql RANDOM() function");
+sql_function!(
+    /// Represents the sql RANDOM() function
+    fn random() -> Numeric
+);
 
 fn escape_fts(search: &str) -> String {
     let mut escaped = String::with_capacity(search.len() + 2);
@@ -34,36 +37,36 @@ impl Database {
     }
 
     #[allow(dead_code)]
-    pub fn insert_link<'a>(&self, link: &'a str, title: &'a str) -> Result<usize> {
+    pub fn insert_link<'a>(&mut self, link: &'a str, title: &'a str) -> Result<usize> {
         let new_link = model::NewLink { link, title };
         diesel::insert_or_ignore_into(schema::links::table)
             .values(new_link)
-            .execute(&self.connection)
+            .execute(&mut self.connection)
             .map_err(|e| e.into())
     }
 
-    pub fn insert_links<'a>(&self, new_links: &[model::NewLink<'a>]) -> Result<usize> {
+    pub fn insert_links<'a>(&mut self, new_links: &[model::NewLink<'a>]) -> Result<usize> {
         diesel::insert_or_ignore_into(schema::links::table)
             .values(new_links)
-            .execute(&self.connection)
+            .execute(&mut self.connection)
             .map_err(|e| e.into())
     }
 
-    pub fn fetch_random_link(&self) -> Result<model::Link> {
+    pub fn fetch_random_link(&mut self) -> Result<model::Link> {
         use schema::links::dsl::*;
         links
-            .order(RANDOM)
+            .order(random())
             .limit(1)
-            .first(&self.connection)
+            .first(&mut self.connection)
             .map_err(|e| e.into())
     }
 
-    pub fn count_links(&self) -> Result<i64> {
+    pub fn count_links(&mut self) -> Result<i64> {
         use schema::links::dsl::*;
-        links.count().first(&self.connection).map_err(|e| e.into())
+        links.count().first(&mut self.connection).map_err(|e| e.into())
     }
 
-    pub fn search_random_full_text(&self, search: &str) -> Result<Option<model::Link>> {
+    pub fn search_random_full_text(&mut self, search: &str) -> Result<Option<model::Link>> {
         use schema::links_title_idx;
         links_title_idx::table
             .select((
@@ -72,19 +75,19 @@ impl Database {
                 links_title_idx::title,
             ))
             .filter(links_title_idx::whole_row.eq(escape_fts(search)))
-            .order(RANDOM)
+            .order(random())
             .limit(1)
-            .first(&self.connection)
+            .first(&mut self.connection)
             .optional()
             .map_err(|e| e.into())
     }
 
-    pub fn count_links_search(&self, search: &str) -> Result<i64> {
+    pub fn count_links_search(&mut self, search: &str) -> Result<i64> {
         use schema::links_title_idx;
         links_title_idx::table
             .count()
             .filter(links_title_idx::whole_row.eq(escape_fts(search)))
-            .first(&self.connection)
+            .first(&mut self.connection)
             .map_err(|e| e.into())
     }
 }
