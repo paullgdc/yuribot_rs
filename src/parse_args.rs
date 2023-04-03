@@ -21,9 +21,8 @@ pub fn parse_args(args: Vec<String>) -> Action {
         opts.optflag("h", "help", "prints the help");
         opts
     };
-    let matches = match opts.parse(args) {
-        Ok(m) => m,
-        Err(_) => return Help(opts.usage("Failed while parsing args")),
+    let Ok(matches) = opts.parse(args) else {
+        return Help(opts.usage("Failed while parsing args"));
     };
     if matches.opt_present("help") {
         return Help(opts.usage(""));

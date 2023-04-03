@@ -16,9 +16,8 @@ mod message {
     use telegram_bot::types::{Message, MessageChat, MessageKind};
     pub type ArgRange = std::ops::Range<usize>;
     pub fn get_arg(message: &Message, range: ArgRange) -> Option<&str> {
-        let data = match &message.kind {
-            MessageKind::Text {ref data,  ..} => data,
-            _ => return None,
+        let MessageKind::Text { ref data, .. } = &message.kind else{
+            return None;
         };
         Some(data[range].trim())
     }
@@ -41,14 +40,15 @@ enum Command {
 
 impl Command {
     fn from_message(botname: &str, message: &Message) -> Option<(Self, bool)> {
-        let (data, entities) = match message.kind {
-            MessageKind::Text {ref data, ref entities} => (data, entities),
-            _ => return None,
+        let MessageKind::Text {
+            ref data,
+            ref entities,
+        } = message.kind else {
+            return None;
         };
         let entity = entities.get(0)?;
-        match entity.kind {
-            MessageEntityKind::BotCommand => {},
-            _ => return None,
+        let MessageEntityKind::BotCommand = entity.kind else {
+            return None;
         };
         if entity.offset != 0 {
             return None;
@@ -88,16 +88,13 @@ async fn handle_more(
         database.get().await?.search_random_full_text(arg)?
     };
 
-    let link = match link {
-        Some(l) => l,
-        None => {
-            api.send_timeout(
-                message.text_reply("There is no image in the database for this. Sorry :("),
-                Duration::from_secs(5),
-            )
-            .await?;
-            return Ok(());
-        }
+    let Some(link) = link else {
+        api.send_timeout(
+            message.text_reply("There is no image in the database for this. Sorry :("),
+            Duration::from_secs(5),
+        )
+        .await?;
+        return Ok(());
     };
     info!(
         "Sending image\n\t{}: {}\n\tUser: {:?}\n\tChat: {:?}",
@@ -198,13 +195,11 @@ pub async fn start_bot(db_pool: db::DbPool, api: Api) {
             }
         };
         debug!("received update: {:?}", update);
-        let message = match update.kind {
-            UpdateKind::Message(message) => message,
-            _ => continue,
+        let UpdateKind::Message(message) = update.kind else {
+             continue;
         };
-        let (command, includes_botname) = match Command::from_message(&botname, &message) {
-            Some(c) => c,
-            None => continue,
+        let Some((command, includes_botname)) = Command::from_message(&botname, &message) else{
+            continue;
         };
         debug!("extracted command: {:?}", command);
         match command {

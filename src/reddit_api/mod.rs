@@ -104,18 +104,16 @@ impl Reddit {
             let data = self.api_call(uri).await?;
             let response = serde_json::from_reader::<_, Type>(data.reader())
                 .map_err(|_| RedditError::ParsingError)?;
-            let listing = match response {
-                Type::Listing(l) => l,
-                _ => return Err(RedditError::UnexpectedResponse),
+            let Type::Listing(listing) = response  else {
+                return Err(RedditError::UnexpectedResponse);
             };
             after = match listing.after {
                 Some(after) => after,
                 None => break,
             };
             for child in listing.children {
-                let link = match child {
-                    Type::Link(l) => l,
-                    _ => return Err(RedditError::UnexpectedResponse),
+                let Type::Link(link) = child else {
+                   return Err(RedditError::UnexpectedResponse);
                 };
                 posts.push(link);
             }
