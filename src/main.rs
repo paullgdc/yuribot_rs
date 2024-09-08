@@ -33,19 +33,14 @@ pub struct Config {
 }
 
 fn read_config(path: &str) -> Result<Config> {
-    let settings = (|| -> std::result::Result<config::Config, config::ConfigError> {
-        let mut settings = config::Config::new();
-        settings
+    let settings: config::Config = config::Config::builder()
             .set_default("database_path", "yuribot_rs.sqlite3")?
             .set_default("log", "yuribot_rs=info")?
-            .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))
-            .expect("default config values")
-            .merge(config::File::with_name(path).required(false))?
-            .merge(config::Environment::with_prefix("YURIBOT"))?;
-        Ok(settings)
-    })()
-    .expect("couldn't build config");
-    Ok(settings.try_into()?)
+        .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))?
+        .add_source(config::File::with_name(path).required(false))
+        .add_source(config::Environment::with_prefix("YURIBOT"))
+        .build()?;
+    Ok(settings.try_deserialize()?)
 }
 
 async fn inner_main() -> Result<()> {
