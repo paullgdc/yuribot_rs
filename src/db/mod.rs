@@ -3,7 +3,7 @@ pub mod model;
 mod schema;
 
 use async_trait::async_trait;
-use diesel::prelude::*;
+use diesel::{dsl::Asc, prelude::*};
 use errors::{DatabaseError, Result};
 
 no_arg_sql_function!(RANDOM, (), "Represents the sql RANDOM() function");
@@ -86,6 +86,21 @@ impl Database {
             .filter(links_title_idx::whole_row.eq(escape_fts(search)))
             .first(&self.connection)
             .map_err(|e| e.into())
+    }
+
+    pub fn get_all(&self, start_at_id: i32) -> Result<Vec<model::Link>> {
+        use schema::links;
+        Ok(links::table
+            .select((links::id, links::link, links::title))
+            .filter(links::id.ge(start_at_id))
+            .order(Asc::new(links::id))
+            .get_results(&self.connection)?)
+    }
+
+    pub fn delete(&self, id: i32) -> Result<()> {
+        use schema::links;
+        diesel::delete(links::table.filter(links::id.eq(id))).execute(&self.connection)?;
+        Ok(())
     }
 }
 

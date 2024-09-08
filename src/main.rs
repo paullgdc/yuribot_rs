@@ -2,6 +2,7 @@ mod bot;
 mod db;
 mod errors;
 mod parse_args;
+mod purge_links;
 mod reddit_api;
 mod scrapper;
 mod utils;
@@ -34,8 +35,8 @@ pub struct Config {
 
 fn read_config(path: &str) -> Result<Config> {
     let settings: config::Config = config::Config::builder()
-            .set_default("database_path", "yuribot_rs.sqlite3")?
-            .set_default("log", "yuribot_rs=info")?
+        .set_default("database_path", "yuribot_rs.sqlite3")?
+        .set_default("log", "yuribot_rs=info")?
         .set_default("reddit_user_agent", format!("yuribot_rs/{}", VERSION))?
         .add_source(config::File::with_name(path).required(false))
         .add_source(config::Environment::with_prefix("YURIBOT"))
@@ -89,6 +90,7 @@ async fn inner_main() -> Result<()> {
             )
         }
         SeedDatabase { limit } => scrapper::seed_database(limit, rd_pool, db_pool).await?,
+        PurgeLinks { dry_run, start_at_id } => purge_links::purge_links(db_pool, dry_run, start_at_id).await?,
         Help(_) => unreachable!(),
     };
 

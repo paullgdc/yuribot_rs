@@ -1,4 +1,5 @@
 use crate::db;
+use crate::purge_links;
 use crate::reddit_api;
 
 use thiserror::Error;
@@ -21,6 +22,8 @@ pub enum YuribotError {
     NoTelegramTokenError,
     #[error("Unable to parse the command passed to the bot")]
     CommandArgParseError,
+    #[error("error while purging the database {0}")]
+    PurgeError(#[from] purge_links::PurgeError),
 }
 
 pub type Result<T> = std::result::Result<T, YuribotError>;
