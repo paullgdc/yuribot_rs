@@ -1,0 +1,3 @@
+{
+    "rust-analyzer.server.path": "~/.rustup/toolchains/1.80.1-aarch64-apple-darwin/bin/rust-analyzer",
+}
