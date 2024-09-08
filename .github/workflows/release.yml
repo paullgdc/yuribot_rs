@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Cache cargo registry
         uses: actions/cache@v1
         with:
