@@ -12,20 +12,20 @@ pub enum Type {
 pub struct Listing {
     pub children: Vec<Type>,
     pub after: Option<String>,
-    pub before: Option<String>,
+    // pub before: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Link {
-    pub subreddit: String,
+    // pub subreddit: String,
     pub title: String,
-    pub name: String,
-    pub over_18: bool,
-    pub pinned: bool,
+    // pub name: String,
+    // pub over_18: bool,
+    // pub pinned: bool,
     pub url: String,
-    pub spoiler: bool,
-    pub selftext: String,
-    pub score: i64,
+    // pub spoiler: bool,
+    // pub selftext: String,
+    // pub score: i64,
 }
 
 #[derive(Debug)]
