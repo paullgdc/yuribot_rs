@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.17"
-config = { version = "0.10", features = ["toml"], default-features = false }
+config = { version = "0.14", features = ["toml"], default-features = false }
 deadpool = "0.2"
 diesel = { version = "1.4.0", features = ["sqlite"], default-features = false }
 diesel_migrations = "1.4.0"
