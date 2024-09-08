@@ -9,7 +9,7 @@ use futures::StreamExt;
 use telegram_bot::{
     prelude::{CanReplySendMessage, CanSendPhoto},
     types::{GetMe, InputFileRef, Message, MessageEntityKind, MessageKind, UpdateKind},
-    Api,
+    Api, CanDeleteMessage,
 };
 
 mod message {
@@ -17,7 +17,7 @@ mod message {
     pub type ArgRange = std::ops::Range<usize>;
     pub fn get_arg(message: &Message, range: ArgRange) -> Option<&str> {
         let data = match &message.kind {
-            MessageKind::Text {ref data,  ..} => data,
+            MessageKind::Text { ref data, .. } => data,
             _ => return None,
         };
         Some(data[range].trim())
@@ -42,12 +42,15 @@ enum Command {
 impl Command {
     fn from_message(botname: &str, message: &Message) -> Option<(Self, bool)> {
         let (data, entities) = match message.kind {
-            MessageKind::Text {ref data, ref entities} => (data, entities),
+            MessageKind::Text {
+                ref data,
+                ref entities,
+            } => (data, entities),
             _ => return None,
         };
         let entity = entities.get(0)?;
         match entity.kind {
-            MessageEntityKind::BotCommand => {},
+            MessageEntityKind::BotCommand => {}
             _ => return None,
         };
         if entity.offset != 0 {
@@ -91,11 +94,18 @@ async fn handle_more(
     let link = match link {
         Some(l) => l,
         None => {
-            api.send_timeout(
-                message.text_reply("There is no image in the database for this. Sorry :("),
-                Duration::from_secs(5),
-            )
-            .await?;
+            let res = api
+                .send_timeout(
+                    message.text_reply("There is no image in the database for this. Sorry :("),
+                    Duration::from_secs(5),
+                )
+                .await?;
+            let Some(res) = res else {
+                return Ok(());
+            };
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            api.send_timeout(res.delete(), Duration::from_secs(5))
+                .await?;
             return Ok(());
         }
     };
